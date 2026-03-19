@@ -8,6 +8,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Plus, Search, Pencil, Trash2 } from "lucide-react";
+import { ResponsiveTable } from "@/components/ui/ResponsiveTable";
 
 type UserRole = "Customer" | "VIP" | "Admin";
 
@@ -135,62 +136,85 @@ const UsersPage = () => {
         </div>
       </div>
 
-      <div className="overflow-x-auto rounded-xl border border-white/10 bg-white/5 p-1 text-white/80 shadow-lg backdrop-blur-xl transition-all duration-300 hover:scale-[1.02] hover:shadow-2xl">
-        <table className="w-full text-xs sm:text-sm">
-          <thead className="bg-white/5">
-            <tr className="border-b text-left transition-colors duration-200 hover:bg-white/10">
-              <th className="px-4 py-3 text-xs font-semibold uppercase tracking-wide text-white/50">User</th>
-              <th className="px-4 py-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Email</th>
-              <th className="px-4 py-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Role</th>
-              <th className="px-4 py-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Joined</th>
-              <th className="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wide text-muted-foreground">Actions</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-white/10">
-            {filteredUsers.map((u) => (
-              <tr key={u.id} className="transition-colors duration-200 hover:bg-white/10">
-                <td className="px-4 py-4">
-                  <div className="flex items-center gap-3">
-                    <div className="flex h-9 w-9 items-center justify-center rounded-full border border-blue-500/30 bg-blue-500/15 text-xs font-semibold text-blue-300">
-                      {u.avatar}
-                    </div>
-                    <span className="font-medium text-white/90">{u.name}</span>
+      {filteredUsers.length === 0 ? (
+        <div className="p-8 text-center text-sm text-white/50">No users found</div>
+      ) : (
+        <ResponsiveTable
+          data={filteredUsers}
+          columns={[
+            {
+              key: "name",
+              header: "User",
+              render: (u) => (
+                <div className="flex items-center gap-3">
+                  <div className="flex h-9 w-9 items-center justify-center rounded-full border border-blue-500/30 bg-blue-500/15 text-xs font-semibold text-blue-300">
+                    {u.avatar}
                   </div>
-                </td>
-                <td className="px-4 py-4 text-white/65">{u.email}</td>
-                <td className="px-4 py-4">
-                  <span className={`inline-flex rounded-full px-2.5 py-1 text-xs font-medium ${roleClasses[(u.role as UserRole) ?? "Customer"]}`}>
-                    {u.role}
-                  </span>
-                </td>
-                <td className="px-4 py-4 text-white/55">{u.joinedAt}</td>
-                <td className="px-4 py-4 text-right">
-                  <div className="flex justify-end gap-2">
-                    <button
-                      onClick={() => openEdit(u)}
-                      className="rounded-lg p-2 text-blue-400 transition-all duration-200 hover:scale-[1.02] hover:bg-white/10"
-                      aria-label={`Edit ${u.name}`}
-                    >
-                      <Pencil className="h-4 w-4" />
-                    </button>
-                    <button
-                      onClick={() => setDeleteId(u.id)}
-                      className="rounded-lg p-2 text-red-400 transition-all duration-200 hover:scale-[1.02] hover:bg-white/10"
-                      aria-label={`Delete ${u.name}`}
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </button>
+                  <span className="font-medium text-white/90">{u.name}</span>
+                </div>
+              ),
+              renderMobile: (u) => (
+                <div className="flex items-center gap-3">
+                  <div className="flex h-9 w-9 items-center justify-center rounded-full border border-blue-500/30 bg-blue-500/15 text-xs font-semibold text-blue-300">
+                    {u.avatar}
                   </div>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-
-        {filteredUsers.length === 0 && (
-          <div className="p-8 text-center text-sm text-white/50">No users found</div>
-        )}
-      </div>
+                  <span className="text-white/90">{u.name}</span>
+                </div>
+              ),
+            },
+            {
+              key: "email",
+              header: "Email",
+              render: (u) => <span className="text-white/65">{u.email}</span>,
+              renderMobile: (u) => <span className="text-white/65">{u.email}</span>,
+            },
+            {
+              key: "role",
+              header: "Role",
+              render: (u) => (
+                <span
+                  className={`inline-flex rounded-full px-2.5 py-1 text-xs font-medium ${roleClasses[(u.role as UserRole) ?? "Customer"]}`}
+                >
+                  {u.role}
+                </span>
+              ),
+              renderMobile: (u) => (
+                <span
+                  className={`inline-flex rounded-full px-2.5 py-1 text-xs font-medium ${roleClasses[(u.role as UserRole) ?? "Customer"]}`}
+                >
+                  {u.role}
+                </span>
+              ),
+            },
+            {
+              key: "joinedAt",
+              header: "Joined",
+              render: (u) => <span className="text-white/55">{u.joinedAt}</span>,
+              renderMobile: (u) => <span className="text-white/55">{u.joinedAt}</span>,
+            },
+          ]}
+          renderActions={(u) => (
+            <>
+              <button
+                onClick={() => openEdit(u)}
+                className="rounded-lg p-2 text-blue-400 transition-all duration-200 hover:scale-[1.02] hover:bg-white/10"
+                aria-label={`Edit ${u.name}`}
+                type="button"
+              >
+                <Pencil className="h-4 w-4" />
+              </button>
+              <button
+                onClick={() => setDeleteId(u.id)}
+                className="rounded-lg p-2 text-red-400 transition-all duration-200 hover:scale-[1.02] hover:bg-white/10"
+                aria-label={`Delete ${u.name}`}
+                type="button"
+              >
+                <Trash2 className="h-4 w-4" />
+              </button>
+            </>
+          )}
+        />
+      )}
 
       <Dialog open={formOpen} onOpenChange={setFormOpen}>
         <DialogContent className="sm:max-w-md">

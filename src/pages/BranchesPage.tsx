@@ -6,6 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Plus, Pencil, Trash2 } from "lucide-react";
 import DeleteModal from "@/components/shared/DeleteModal";
+import { ResponsiveTable } from "@/components/ui/ResponsiveTable";
 
 type BranchStatus = "Active" | "Inactive";
 
@@ -109,55 +110,105 @@ const BranchesPage = () => {
         )}
       />
 
-      <div className="overflow-x-auto rounded-xl border border-white/10 bg-white/5 p-1 text-white/80 shadow-lg backdrop-blur-xl transition-all duration-300 hover:scale-[1.02] hover:shadow-2xl">
-        <table className="w-full text-xs sm:text-sm">
-          <thead className="bg-white/5">
-            <tr className="border-b text-left transition-colors duration-200 hover:bg-white/10">
-              <th className="px-4 py-3 text-xs font-semibold uppercase tracking-wide text-white/50">Branch Name</th>
-              <th className="px-4 py-3 text-xs font-semibold uppercase tracking-wide text-white/50">Phone</th>
-              <th className="px-4 py-3 text-xs font-semibold uppercase tracking-wide text-white/50">Email</th>
-              <th className="px-4 py-3 text-xs font-semibold uppercase tracking-wide text-white/50">Location</th>
-              <th className="px-4 py-3 text-xs font-semibold uppercase tracking-wide text-white/50">Map URL</th>
-              <th className="px-4 py-3 text-xs font-semibold uppercase tracking-wide text-white/50">Status</th>
-              <th className="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wide text-white/50">Actions</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-white/10">
-            {branches.map((branch) => (
-              <tr key={branch.id} className="transition-colors duration-200 hover:bg-white/10">
-                <td className="px-4 py-4 font-medium text-white/90">{branch.name}</td>
-                <td className="px-4 py-4 text-white/65">{branch.phone}</td>
-                <td className="px-4 py-4 text-white/65">{branch.email}</td>
-                <td className="px-4 py-4 text-white/65">{branch.location}</td>
-                <td className="px-4 py-4">
-                  <a href={branch.mapUrl} className="text-blue-400 hover:text-blue-300 hover:underline" target="_blank" rel="noreferrer">
-                    Open Map
-                  </a>
-                </td>
-                <td className="px-4 py-4">
-                  <span className={`inline-flex rounded-full border px-3 py-1 text-xs font-semibold ${
-                    branch.status === "Active"
-                      ? "border-green-500/30 bg-green-500/20 text-green-400"
-                      : "border-white/10 bg-white/10 text-white/70"
-                  }`}>
-                    {branch.status}
-                  </span>
-                </td>
-                <td className="px-4 py-4 text-right">
-                  <div className="flex justify-end gap-2">
-                    <button onClick={() => openEdit(branch)} className="rounded-lg p-2 text-blue-400 transition-all duration-200 hover:scale-[1.02] hover:bg-white/10">
-                      <Pencil className="h-4 w-4" />
-                    </button>
-                    <button onClick={() => setDeleteId(branch.id)} className="rounded-lg p-2 text-red-400 transition-all duration-200 hover:scale-[1.02] hover:bg-white/10">
-                      <Trash2 className="h-4 w-4" />
-                    </button>
-                  </div>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+      <ResponsiveTable
+        data={branches}
+        columns={[
+          {
+            key: "name",
+            header: "Branch Name",
+            render: (b) => <span className="font-medium text-white/90">{b.name}</span>,
+            renderMobile: (b) => <span className="text-white/90">{b.name}</span>,
+          },
+          {
+            key: "phone",
+            header: "Phone",
+            render: (b) => <span className="text-white/65">{b.phone}</span>,
+            renderMobile: (b) => <span className="text-white/65">{b.phone}</span>,
+          },
+          {
+            key: "email",
+            header: "Email",
+            render: (b) => <span className="text-white/65">{b.email}</span>,
+            renderMobile: (b) => <span className="text-white/65">{b.email}</span>,
+          },
+          {
+            key: "location",
+            header: "Location",
+            render: (b) => <span className="text-white/65">{b.location}</span>,
+            renderMobile: (b) => <span className="text-white/65">{b.location}</span>,
+          },
+          {
+            key: "mapUrl",
+            header: "Map URL",
+            render: (b) => (
+              <a
+                href={b.mapUrl}
+                className="text-blue-400 hover:text-blue-300 hover:underline"
+                target="_blank"
+                rel="noreferrer"
+              >
+                Open Map
+              </a>
+            ),
+            renderMobile: (b) => (
+              <a
+                href={b.mapUrl}
+                className="text-blue-400 hover:text-blue-300 hover:underline"
+                target="_blank"
+                rel="noreferrer"
+              >
+                Open Map
+              </a>
+            ),
+          },
+          {
+            key: "status",
+            header: "Status",
+            render: (b) => (
+              <span
+                className={`inline-flex rounded-full border px-3 py-1 text-xs font-semibold ${
+                  b.status === "Active"
+                    ? "border-green-500/30 bg-green-500/20 text-green-400"
+                    : "border-white/10 bg-white/10 text-white/70"
+                }`}
+              >
+                {b.status}
+              </span>
+            ),
+            renderMobile: (b) => (
+              <span
+                className={`inline-flex rounded-full border px-3 py-1 text-xs font-semibold ${
+                  b.status === "Active"
+                    ? "border-green-500/30 bg-green-500/20 text-green-400"
+                    : "border-white/10 bg-white/10 text-white/70"
+                }`}
+              >
+                {b.status}
+              </span>
+            ),
+          },
+        ]}
+        renderActions={(b) => (
+          <>
+            <button
+              onClick={() => openEdit(b)}
+              className="rounded-lg p-2 text-blue-400 transition-all duration-200 hover:scale-[1.02] hover:bg-white/10"
+              aria-label={`Edit ${b.name}`}
+              type="button"
+            >
+              <Pencil className="h-4 w-4" />
+            </button>
+            <button
+              onClick={() => setDeleteId(b.id)}
+              className="rounded-lg p-2 text-red-400 transition-all duration-200 hover:scale-[1.02] hover:bg-white/10"
+              aria-label={`Delete ${b.name}`}
+              type="button"
+            >
+              <Trash2 className="h-4 w-4" />
+            </button>
+          </>
+        )}
+      />
 
       <Dialog open={formOpen} onOpenChange={setFormOpen}>
         <DialogContent className="sm:max-w-lg">

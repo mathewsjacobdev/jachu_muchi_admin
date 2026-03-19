@@ -1,5 +1,7 @@
-import { MessageSquareText, Sparkles, BadgeCheck, CircleX } from "lucide-react";
+import { MessageSquareText, Sparkles, BadgeCheck, CircleX, Eye, Trash2 } from "lucide-react";
 import { motion } from "framer-motion";
+import { useMemo, useState } from "react";
+import { Link } from "react-router-dom";
 import PageHeader from "@/components/shared/PageHeader";
 
 type EnquiryStatus = "New" | "Contacted" | "Interested" | "Converted" | "Closed";
@@ -13,7 +15,7 @@ interface Enquiry {
   status: EnquiryStatus;
 }
 
-const enquiries: Enquiry[] = [
+const initialEnquiries: Enquiry[] = [
   {
     id: 1,
     name: "Aarav Sharma",
@@ -71,44 +73,51 @@ const statusClasses: Record<EnquiryStatus, string> = {
   Converted: "border border-green-400/20 bg-green-400/10 text-green-300",
   Closed: "border border-red-400/20 bg-red-400/10 text-red-300",
 };
+const DashboardPage = () => {
+  const [enquiries, setEnquiries] = useState<Enquiry[]>(initialEnquiries);
 
-const statCards = [
-  {
-    label: "Total Enquiries",
-    value: enquiries.length.toLocaleString(),
-    icon: MessageSquareText,
-    cardClass: "bg-white/10 border border-white/20 shadow-md backdrop-blur-lg",
-    iconClass: "bg-blue-400/10 text-blue-300 border border-blue-400/20",
-  },
-  {
-    label: "New Leads",
-    value: enquiries.filter((item) => item.status === "New").length.toLocaleString(),
-    icon: Sparkles,
-    cardClass: "bg-white/10 border border-white/20 shadow-md backdrop-blur-lg",
-    iconClass: "bg-yellow-400/10 text-yellow-300 border border-yellow-400/20",
-  },
-  {
-    label: "Converted Leads",
-    value: enquiries
-      .filter((item) => item.status === "Converted")
-      .length.toLocaleString(),
-    icon: BadgeCheck,
-    cardClass: "bg-white/10 border border-white/20 shadow-md backdrop-blur-lg",
-    iconClass: "bg-green-400/10 text-green-300 border border-green-400/20",
-  },
-  {
-    label: "Closed Leads",
-    value: enquiries.filter((item) => item.status === "Closed").length.toLocaleString(),
-    icon: CircleX,
-    cardClass: "bg-white/10 border border-white/20 shadow-md backdrop-blur-lg",
-    iconClass: "bg-red-400/10 text-red-300 border border-red-400/20",
-  },
-];
+  const statCards = useMemo(
+    () => [
+      {
+        label: "Total Enquiries",
+        value: enquiries.length.toLocaleString(),
+        icon: MessageSquareText,
+        cardClass: "bg-white/10 border border-white/20 shadow-md backdrop-blur-lg",
+        iconClass: "bg-blue-400/10 text-blue-300 border border-blue-400/20",
+      },
+      {
+        label: "New Leads",
+        value: enquiries.filter((item) => item.status === "New").length.toLocaleString(),
+        icon: Sparkles,
+        cardClass: "bg-white/10 border border-white/20 shadow-md backdrop-blur-lg",
+        iconClass: "bg-yellow-400/10 text-yellow-300 border border-yellow-400/20",
+      },
+      {
+        label: "Converted Leads",
+        value: enquiries.filter((item) => item.status === "Converted").length.toLocaleString(),
+        icon: BadgeCheck,
+        cardClass: "bg-white/10 border border-white/20 shadow-md backdrop-blur-lg",
+        iconClass: "bg-green-400/10 text-green-300 border border-green-400/20",
+      },
+      {
+        label: "Closed Leads",
+        value: enquiries.filter((item) => item.status === "Closed").length.toLocaleString(),
+        icon: CircleX,
+        cardClass: "bg-white/10 border border-white/20 shadow-md backdrop-blur-lg",
+        iconClass: "bg-red-400/10 text-red-300 border border-red-400/20",
+      },
+    ],
+    [enquiries],
+  );
 
-const recentEnquiries = enquiries.slice(0, 5);
+  const recentEnquiries = useMemo(() => enquiries.slice(0, 5), [enquiries]);
 
-const DashboardPage = () => (
-  <div className="space-y-6">
+  const handleDelete = (id: number) => {
+    setEnquiries((prev) => prev.filter((enquiry) => enquiry.id !== id));
+  };
+
+  return (
+    <div className="space-y-6">
     <PageHeader
       title="Dashboard"
       description="Quick snapshot of enquiry performance and latest leads."
@@ -144,7 +153,7 @@ const DashboardPage = () => (
         <h2 className="text-base font-semibold text-gray-100">Recent Enquiries</h2>
         <p className="text-xs text-gray-300">Latest 5 enquiries received</p>
       </div>
-      <div className="overflow-x-auto rounded-xl border border-white/20 bg-white/10 backdrop-blur-lg">
+      <div className="hidden md:block overflow-x-auto rounded-xl border border-white/20 bg-white/10 backdrop-blur-lg">
         <table className="min-w-full divide-y divide-white/10 text-xs sm:text-sm">
           <thead className="bg-white/10">
             <tr>
@@ -163,11 +172,17 @@ const DashboardPage = () => (
               <th className="whitespace-nowrap px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-300">
                 Status
               </th>
+              <th className="whitespace-nowrap px-4 py-3 text-right text-xs font-semibold uppercase tracking-wide text-gray-300">
+                Actions
+              </th>
             </tr>
           </thead>
           <tbody className="divide-y divide-white/10 bg-transparent">
             {recentEnquiries.map((enquiry) => (
-              <tr className="group transition-colors duration-200 hover:bg-white/10" key={enquiry.id}>
+              <tr
+                className="group transition-colors duration-200 hover:bg-white/10"
+                key={enquiry.id}
+              >
                 <td className="whitespace-nowrap px-4 py-3 text-sm font-semibold text-gray-200">
                   {enquiry.name}
                 </td>
@@ -187,13 +202,77 @@ const DashboardPage = () => (
                     {enquiry.status}
                   </span>
                 </td>
+                <td className="whitespace-nowrap px-4 py-3 text-right">
+                  <div className="inline-flex items-center gap-2">
+                    <Link
+                      to={`/enquiries/${enquiry.id}`}
+                      className="inline-flex h-9 w-9 items-center justify-center rounded-lg bg-blue-600 text-white shadow-md transition-all duration-200 hover:scale-[1.02] hover:shadow-xl hover:bg-blue-700"
+                      aria-label={`View enquiry for ${enquiry.name}`}
+                    >
+                      <Eye className="h-4 w-4" />
+                    </Link>
+                    <button
+                      type="button"
+                      onClick={() => handleDelete(enquiry.id)}
+                      className="inline-flex h-9 w-9 items-center justify-center rounded-lg bg-red-400/10 text-red-300 shadow-md transition-all duration-200 hover:scale-[1.02] hover:shadow-xl hover:bg-red-400/15"
+                      aria-label={`Delete enquiry for ${enquiry.name}`}
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </button>
+                  </div>
+                </td>
               </tr>
             ))}
           </tbody>
         </table>
       </div>
+
+      <div className="md:hidden space-y-3">
+        {recentEnquiries.map((enquiry) => (
+          <div
+            key={enquiry.id}
+            className="rounded-xl border border-white/20 bg-white/10 backdrop-blur-lg p-4 shadow-md space-y-2 transition-all duration-300 hover:scale-[1.02] hover:shadow-2xl"
+          >
+            <div className="flex items-center justify-between gap-3">
+              <p className="truncate text-sm font-bold text-gray-100">{enquiry.name}</p>
+              <span
+                className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ${statusClasses[enquiry.status]}`}
+              >
+                {enquiry.status}
+              </span>
+            </div>
+
+            <div className="space-y-1">
+              <p className="text-sm text-gray-300">Phone: <span className="text-gray-200">{enquiry.phone}</span></p>
+              <p className="text-sm text-gray-300">Course: <span className="text-gray-200">{enquiry.course}</span></p>
+              <p className="text-sm text-gray-300">Date: <span className="text-gray-200">{enquiry.date}</span></p>
+            </div>
+
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Link
+                  to={`/enquiries/${enquiry.id}`}
+                  className="inline-flex h-9 w-9 items-center justify-center rounded-lg bg-blue-600 text-white shadow-md transition-all duration-200 hover:scale-[1.02] hover:shadow-xl hover:bg-blue-700"
+                  aria-label={`View enquiry for ${enquiry.name}`}
+                >
+                  <Eye className="h-4 w-4" />
+                </Link>
+                <button
+                  type="button"
+                  onClick={() => handleDelete(enquiry.id)}
+                  className="inline-flex h-9 w-9 items-center justify-center rounded-lg bg-red-400/10 text-red-300 shadow-md transition-all duration-200 hover:scale-[1.02] hover:shadow-xl hover:bg-red-400/15"
+                  aria-label={`Delete enquiry for ${enquiry.name}`}
+                >
+                  <Trash2 className="h-4 w-4" />
+                </button>
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
     </div>
-  </div>
-);
+    </div>
+  );
+};
 
 export default DashboardPage;

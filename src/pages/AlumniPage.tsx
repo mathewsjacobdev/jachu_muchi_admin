@@ -6,6 +6,7 @@ import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import DeleteModal from "@/components/shared/DeleteModal";
 import { Plus, Pencil, Trash2 } from "lucide-react";
+import { ResponsiveTable } from "@/components/ui/ResponsiveTable";
 
 interface Alumni {
   id: string;
@@ -78,37 +79,49 @@ const AlumniPage = () => {
         )}
       />
 
-      <div className="overflow-x-auto rounded-xl border border-white/10 bg-white/5 p-1 text-white/80 shadow-lg backdrop-blur-xl transition-all duration-300 hover:scale-[1.02] hover:shadow-2xl">
-        <table className="w-full text-xs sm:text-sm">
-          <thead className="bg-white/5">
-            <tr className="border-b text-left transition-colors duration-200 hover:bg-white/10">
-              <th className="px-4 py-3 text-xs font-semibold uppercase tracking-wide text-white/50">Name</th>
-              <th className="px-4 py-3 text-xs font-semibold uppercase tracking-wide text-white/50">Company</th>
-              <th className="px-4 py-3 text-xs font-semibold uppercase tracking-wide text-white/50">Role</th>
-              <th className="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wide text-white/50">Actions</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-white/10">
-            {alumni.map((item) => (
-              <tr key={item.id} className="transition-colors duration-200 hover:bg-white/10">
-                <td className="px-4 py-4 font-medium text-white/90">{item.name}</td>
-                <td className="px-4 py-4 text-white/65">{item.company}</td>
-                <td className="px-4 py-4 text-white/65">{item.role}</td>
-                <td className="px-4 py-4 text-right">
-                  <div className="flex justify-end gap-2">
-                    <button onClick={() => openEdit(item)} className="rounded-lg p-2 text-blue-400 transition-all duration-200 hover:scale-[1.02] hover:bg-white/10">
-                      <Pencil className="h-4 w-4" />
-                    </button>
-                    <button onClick={() => setDeleteId(item.id)} className="rounded-lg p-2 text-red-400 transition-all duration-200 hover:scale-[1.02] hover:bg-white/10">
-                      <Trash2 className="h-4 w-4" />
-                    </button>
-                  </div>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+      <ResponsiveTable
+        data={alumni}
+        columns={[
+          {
+            key: "name",
+            header: "Name",
+            render: (item) => <span className="font-medium text-white/90">{item.name}</span>,
+            renderMobile: (item) => <span className="text-white/90">{item.name}</span>,
+          },
+          {
+            key: "company",
+            header: "Company",
+            render: (item) => <span className="text-white/65">{item.company}</span>,
+            renderMobile: (item) => <span className="text-white/65">{item.company}</span>,
+          },
+          {
+            key: "role",
+            header: "Role",
+            render: (item) => <span className="text-white/65">{item.role}</span>,
+            renderMobile: (item) => <span className="text-white/65">{item.role}</span>,
+          },
+        ]}
+        renderActions={(item) => (
+          <>
+            <button
+              onClick={() => openEdit(item)}
+              className="rounded-lg p-2 text-blue-400 transition-all duration-200 hover:scale-[1.02] hover:bg-white/10"
+              aria-label={`Edit ${item.name}`}
+              type="button"
+            >
+              <Pencil className="h-4 w-4" />
+            </button>
+            <button
+              onClick={() => setDeleteId(item.id)}
+              className="rounded-lg p-2 text-red-400 transition-all duration-200 hover:scale-[1.02] hover:bg-white/10"
+              aria-label={`Delete ${item.name}`}
+              type="button"
+            >
+              <Trash2 className="h-4 w-4" />
+            </button>
+          </>
+        )}
+      />
 
       <Dialog open={formOpen} onOpenChange={setFormOpen}>
         <DialogContent className="sm:max-w-md">
