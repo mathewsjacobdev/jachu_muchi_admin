@@ -1,6 +1,10 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import PageHeader from "@/components/shared/PageHeader";
 import { Button } from "@/components/ui/button";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { ImagePlus, Trash2 } from "lucide-react";
 
 type GalleryCategory = "Campus" | "Labs" | "Events";
@@ -19,26 +23,67 @@ const initialGallery: GalleryItem[] = [
 ];
 
 const categories: Array<"All" | GalleryCategory> = ["All", "Campus", "Labs", "Events"];
+const uploadCategories: GalleryCategory[] = ["Campus", "Labs", "Events"];
 
 const GalleryPage = () => {
   const [items, setItems] = useState<GalleryItem[]>(initialGallery);
   const [categoryFilter, setCategoryFilter] = useState<"All" | GalleryCategory>("All");
+  const [formOpen, setFormOpen] = useState(false);
+  const [form, setForm] = useState({
+    title: "",
+    category: "Campus" as GalleryCategory,
+    imageFile: null as File | null,
+  });
+  const [previewImage, setPreviewImage] = useState("");
 
   const filteredItems = useMemo(
     () => items.filter((item) => categoryFilter === "All" || item.category === categoryFilter),
     [items, categoryFilter],
   );
 
-  const handleUploadMock = () => {
+  useEffect(() => () => {
+    if (previewImage.startsWith("blob:")) {
+      URL.revokeObjectURL(previewImage);
+    }
+  }, [previewImage]);
+
+  const openUploadForm = () => {
+    if (previewImage.startsWith("blob:")) {
+      URL.revokeObjectURL(previewImage);
+    }
+    setForm({
+      title: "",
+      category: "Campus",
+      imageFile: null,
+    });
+    setPreviewImage("");
+    setFormOpen(true);
+  };
+
+  const onImageChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0] ?? null;
+    if (!file || !file.type.startsWith("image/")) return;
+
+    if (previewImage.startsWith("blob:")) {
+      URL.revokeObjectURL(previewImage);
+    }
+
+    setForm((prev) => ({ ...prev, imageFile: file }));
+    setPreviewImage(URL.createObjectURL(file));
+  };
+
+  const handleSave = () => {
+    if (!form.title.trim() || !previewImage || !form.imageFile) return;
     setItems((prev) => [
       {
         id: Date.now().toString(),
-        title: "New Upload",
-        category: "Campus",
-        image: "https://images.unsplash.com/photo-1523050854058-8df90110c9f1?w=600&h=400&fit=crop",
+        title: form.title.trim(),
+        category: form.category,
+        image: previewImage,
       },
       ...prev,
     ]);
+    setFormOpen(false);
   };
 
   return (
@@ -47,7 +92,7 @@ const GalleryPage = () => {
         title="Gallery Management"
         description={`${items.length} media items`}
         action={(
-          <Button onClick={handleUploadMock} size="sm">
+          <Button onClick={openUploadForm} size="sm">
             <ImagePlus className="mr-1 h-4 w-4" />
             Upload Image
           </Button>
@@ -93,6 +138,58 @@ const GalleryPage = () => {
           </div>
         ))}
       </div>
+
+      <Dialog open={formOpen} onOpenChange={setFormOpen}>
+        <DialogContent className="border-white/10 bg-white/10 backdrop-blur-lg sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Upload Image</DialogTitle>
+          </DialogHeader>
+
+          <div className="space-y-4 rounded-xl bg-white/10 p-4 backdrop-blur-lg">
+            <div className="space-y-1.5">
+              <Label>Image</Label>
+              <Input type="file" accept="image/*" onChange={onImageChange} />
+              {previewImage ? (
+                <img src={previewImage} alt="Preview" className="h-44 w-full rounded-lg object-cover" />
+              ) : null}
+            </div>
+
+            <div className="space-y-1.5">
+              <Label>Title</Label>
+              <Input
+                value={form.title}
+                onChange={(e) => setForm((prev) => ({ ...prev, title: e.target.value }))}
+                placeholder="Image title"
+              />
+            </div>
+
+            <div className="space-y-1.5">
+              <Label>Category</Label>
+              <Select value={form.category} onValueChange={(value) => setForm((prev) => ({ ...prev, category: value as GalleryCategory }))}>
+                <SelectTrigger className="h-10 w-full rounded-lg border border-white/20 bg-white/10 text-white backdrop-blur-lg hover:bg-white/10 data-[placeholder]:text-gray-300">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent className="border border-white/10 bg-slate-900 text-white">
+                  {uploadCategories.map((category) => (
+                    <SelectItem key={category} className="focus:bg-white/10 focus:text-white data-[state=checked]:bg-blue-500/20 data-[state=checked]:text-blue-200" value={category}>
+                      {category}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="flex justify-end gap-2">
+              <Button type="button" variant="outline" onClick={() => setFormOpen(false)}>
+                Cancel
+              </Button>
+              <Button type="button" onClick={handleSave}>
+                Save
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };

@@ -2,6 +2,7 @@ import { useMemo, useState } from "react";
 import { ArrowLeft, Save } from "lucide-react";
 import { Link, useParams } from "react-router-dom";
 import PageHeader from "@/components/shared/PageHeader";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 type EnquiryStatus = "New" | "Contacted" | "Interested" | "Converted" | "Closed";
 
@@ -181,17 +182,18 @@ const EnquiryDetailPage = () => {
               >
                 {status}
               </span>
-              <select
-                value={status}
-                onChange={(event) => setStatus(event.target.value as EnquiryStatus)}
-                className="h-10 rounded-lg border border-white/10 bg-white/5 px-3 text-sm text-white/80 shadow-sm backdrop-blur-md transition-all duration-200 hover:bg-white/10 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
-              >
-                {STATUS_OPTIONS.map((item) => (
-                  <option key={item} value={item}>
-                    {item}
-                  </option>
-                ))}
-              </select>
+              <Select value={status} onValueChange={(value) => setStatus(value as EnquiryStatus)}>
+                <SelectTrigger className="h-10 w-[170px] rounded-lg border border-white/20 bg-white/10 text-white backdrop-blur-lg hover:bg-white/10 data-[placeholder]:text-gray-300">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent className="border border-white/10 bg-slate-900 text-white">
+                  {STATUS_OPTIONS.map((item) => (
+                    <SelectItem key={item} className="focus:bg-white/10 focus:text-white data-[state=checked]:bg-blue-500/20 data-[state=checked]:text-blue-200" value={item}>
+                      {item}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
           </div>
         </div>

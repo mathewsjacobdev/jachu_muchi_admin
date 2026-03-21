@@ -1,73 +1,81 @@
 import { useMemo, useState } from "react";
 import { MOCK_USERS } from "@/lib/mock-data";
-import { User } from "@/types";
 import PageHeader from "@/components/shared/PageHeader";
 import DeleteModal from "@/components/shared/DeleteModal";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Plus, Search, Pencil, Trash2 } from "lucide-react";
-import { ResponsiveTable } from "@/components/ui/ResponsiveTable";
 
-type UserRole = "Customer" | "VIP" | "Admin";
+type UserRole = "Admin" | "Sub Admin" | "Editor";
+type UserStatus = "Active" | "Inactive";
+
+interface ManagedUser {
+  id: string;
+  name: string;
+  email: string;
+  role: UserRole;
+  status: UserStatus;
+}
 
 const roleClasses: Record<UserRole, string> = {
-  Customer: "border border-white/10 bg-white/10 text-white/80",
-  VIP: "border border-blue-500/30 bg-blue-500/20 text-blue-400",
-  Admin: "border border-green-500/30 bg-green-500/20 text-green-400",
+  Admin: "border border-emerald-500/30 bg-emerald-500/15 text-emerald-300",
+  "Sub Admin": "border border-blue-500/30 bg-blue-500/15 text-blue-300",
+  Editor: "border border-purple-500/30 bg-purple-500/15 text-purple-300",
 };
 
-const getInitials = (name: string) =>
-  name
-    .split(" ")
-    .filter(Boolean)
-    .slice(0, 2)
-    .map((part) => part[0]?.toUpperCase() ?? "")
-    .join("");
+const statusClasses: Record<UserStatus, string> = {
+  Active: "border border-green-500/30 bg-green-500/15 text-green-300",
+  Inactive: "border border-white/15 bg-white/10 text-gray-400",
+};
 
 const emptyForm = {
   name: "",
   email: "",
-  role: "Customer" as UserRole,
-  joinedAt: new Date().toISOString().split("T")[0],
+  role: "Sub Admin" as UserRole,
+  status: "Active" as UserStatus,
 };
 
+const seedUsers: ManagedUser[] = MOCK_USERS.map((user, index) => ({
+  id: user.id,
+  name: user.name,
+  email: user.email,
+  role: index % 3 === 0 ? "Admin" : index % 3 === 1 ? "Sub Admin" : "Editor",
+  status: index % 4 === 0 ? "Inactive" : "Active",
+}));
+
 const UsersPage = () => {
-  const [users, setUsers] = useState<User[]>(MOCK_USERS);
+  const [users, setUsers] = useState<ManagedUser[]>(seedUsers);
   const [search, setSearch] = useState("");
   const [formOpen, setFormOpen] = useState(false);
-  const [editing, setEditing] = useState<User | null>(null);
+  const [editing, setEditing] = useState<ManagedUser | null>(null);
   const [form, setForm] = useState(emptyForm);
   const [deleteId, setDeleteId] = useState<string | null>(null);
 
   const filteredUsers = useMemo(() => {
     const query = search.trim().toLowerCase();
-    return users.filter((user) => {
-      return (
-        user.name.toLowerCase().includes(query) ||
-        user.email.toLowerCase().includes(query) ||
-        user.role.toLowerCase().includes(query)
-      );
-    });
+    return users.filter((user) =>
+      user.name.toLowerCase().includes(query) ||
+      user.email.toLowerCase().includes(query) ||
+      user.role.toLowerCase().includes(query)
+    );
   }, [users, search]);
 
   const openAdd = () => {
     setEditing(null);
-    setForm({
-      ...emptyForm,
-      joinedAt: new Date().toISOString().split("T")[0],
-    });
+    setForm(emptyForm);
     setFormOpen(true);
   };
 
-  const openEdit = (user: User) => {
+  const openEdit = (user: ManagedUser) => {
     setEditing(user);
     setForm({
       name: user.name,
       email: user.email,
-      role: user.role as UserRole,
-      joinedAt: user.joinedAt,
+      role: user.role,
+      status: user.status,
     });
     setFormOpen(true);
   };
@@ -75,32 +83,16 @@ const UsersPage = () => {
   const handleSave = () => {
     if (!form.name.trim() || !form.email.trim()) return;
 
-    const nextUser: Omit<User, "id" | "avatar"> = {
-      name: form.name,
-      email: form.email,
-      role: form.role,
-      joinedAt: form.joinedAt,
-    };
-
     if (editing) {
       setUsers((prev) =>
-        prev.map((user) =>
-          user.id === editing.id
-            ? { ...user, ...nextUser, avatar: getInitials(nextUser.name) }
-            : user,
-        ),
+        prev.map((user) => user.id === editing.id ? { ...user, ...form } : user),
       );
     } else {
       setUsers((prev) => [
-        {
-          id: Date.now().toString(),
-          ...nextUser,
-          avatar: getInitials(nextUser.name),
-        },
+        { id: Date.now().toString(), ...form },
         ...prev,
       ]);
     }
-
     setFormOpen(false);
   };
 
@@ -111,11 +103,25 @@ const UsersPage = () => {
     setDeleteId(null);
   };
 
+  const updateRole = (id: string, role: UserRole) => {
+    setUsers((prev) => prev.map((user) => (user.id === id ? { ...user, role } : user)));
+  };
+
+  const toggleStatus = (id: string) => {
+    setUsers((prev) =>
+      prev.map((user) =>
+        user.id === id
+          ? { ...user, status: user.status === "Active" ? "Inactive" : "Active" }
+          : user,
+      ),
+    );
+  };
+
   return (
     <div className="space-y-6">
       <PageHeader
-        title="Users"
-        description={`${users.length} registered users`}
+        title="User Management"
+        description={`${users.length} admin users`}
         action={(
           <Button onClick={openAdd} size="sm">
             <Plus className="mr-1 h-4 w-4" />
@@ -137,119 +143,107 @@ const UsersPage = () => {
       </div>
 
       {filteredUsers.length === 0 ? (
-        <div className="p-8 text-center text-sm text-white/50">No users found</div>
+        <div className="rounded-xl border border-dashed border-white/20 bg-white/10 p-8 text-center text-sm text-white/60 backdrop-blur-lg">
+          No users found.
+        </div>
       ) : (
-        <ResponsiveTable
-          data={filteredUsers}
-          columns={[
-            {
-              key: "name",
-              header: "User",
-              render: (u) => (
-                <div className="flex items-center gap-3">
-                  <div className="flex h-9 w-9 items-center justify-center rounded-full border border-blue-500/30 bg-blue-500/15 text-xs font-semibold text-blue-300">
-                    {u.avatar}
-                  </div>
-                  <span className="font-medium text-white/90">{u.name}</span>
-                </div>
-              ),
-              renderMobile: (u) => (
-                <div className="flex items-center gap-3">
-                  <div className="flex h-9 w-9 items-center justify-center rounded-full border border-blue-500/30 bg-blue-500/15 text-xs font-semibold text-blue-300">
-                    {u.avatar}
-                  </div>
-                  <span className="text-white/90">{u.name}</span>
-                </div>
-              ),
-            },
-            {
-              key: "email",
-              header: "Email",
-              render: (u) => <span className="text-white/65">{u.email}</span>,
-              renderMobile: (u) => <span className="text-white/65">{u.email}</span>,
-            },
-            {
-              key: "role",
-              header: "Role",
-              render: (u) => (
-                <span
-                  className={`inline-flex rounded-full px-2.5 py-1 text-xs font-medium ${roleClasses[(u.role as UserRole) ?? "Customer"]}`}
-                >
-                  {u.role}
+        <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
+          {filteredUsers.map((user) => (
+            <div
+              key={user.id}
+              className="rounded-xl border border-white/20 bg-white/10 p-5 shadow-lg backdrop-blur-lg transition-all duration-300 hover:-translate-y-1 hover:shadow-2xl"
+            >
+              <div className="space-y-1.5">
+                <h3 className="text-lg font-semibold text-white">{user.name}</h3>
+                <p className="text-sm text-gray-300">{user.email}</p>
+              </div>
+
+              <div className="mt-4 flex items-center gap-2">
+                <span className={`inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ${roleClasses[user.role]}`}>
+                  {user.role}
                 </span>
-              ),
-              renderMobile: (u) => (
-                <span
-                  className={`inline-flex rounded-full px-2.5 py-1 text-xs font-medium ${roleClasses[(u.role as UserRole) ?? "Customer"]}`}
-                >
-                  {u.role}
+                <span className={`inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ${statusClasses[user.status]}`}>
+                  {user.status}
                 </span>
-              ),
-            },
-            {
-              key: "joinedAt",
-              header: "Joined",
-              render: (u) => <span className="text-white/55">{u.joinedAt}</span>,
-              renderMobile: (u) => <span className="text-white/55">{u.joinedAt}</span>,
-            },
-          ]}
-          renderActions={(u) => (
-            <>
-              <button
-                onClick={() => openEdit(u)}
-                className="rounded-lg p-2 text-blue-400 transition-all duration-200 hover:scale-[1.02] hover:bg-white/10"
-                aria-label={`Edit ${u.name}`}
-                type="button"
-              >
-                <Pencil className="h-4 w-4" />
-              </button>
-              <button
-                onClick={() => setDeleteId(u.id)}
-                className="rounded-lg p-2 text-red-400 transition-all duration-200 hover:scale-[1.02] hover:bg-white/10"
-                aria-label={`Delete ${u.name}`}
-                type="button"
-              >
-                <Trash2 className="h-4 w-4" />
-              </button>
-            </>
-          )}
-        />
+              </div>
+
+              <div className="mt-4 grid grid-cols-2 gap-2">
+                <Select value={user.role} onValueChange={(value) => updateRole(user.id, value as UserRole)}>
+                  <SelectTrigger aria-label={`Change role for ${user.name}`} className="h-9 rounded-lg border border-white/20 bg-white/10 px-2.5 text-xs text-white backdrop-blur-lg hover:bg-white/10 data-[placeholder]:text-gray-300">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent className="border border-white/10 bg-slate-900 text-white">
+                    <SelectItem className="focus:bg-white/10 focus:text-white data-[state=checked]:bg-blue-500/20 data-[state=checked]:text-blue-200" value="Admin">Admin</SelectItem>
+                    <SelectItem className="focus:bg-white/10 focus:text-white data-[state=checked]:bg-blue-500/20 data-[state=checked]:text-blue-200" value="Sub Admin">Sub Admin</SelectItem>
+                    <SelectItem className="focus:bg-white/10 focus:text-white data-[state=checked]:bg-blue-500/20 data-[state=checked]:text-blue-200" value="Editor">Editor</SelectItem>
+                  </SelectContent>
+                </Select>
+
+                <Button type="button" variant="outline" size="sm" onClick={() => toggleStatus(user.id)}>
+                  {user.status === "Active" ? "Deactivate" : "Activate"}
+                </Button>
+              </div>
+
+              <div className="mt-4 flex items-center gap-2">
+                <Button type="button" size="sm" variant="outline" onClick={() => openEdit(user)}>
+                  <Pencil className="h-4 w-4" />
+                  Edit
+                </Button>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  className="text-red-300 hover:text-red-200"
+                  onClick={() => setDeleteId(user.id)}
+                >
+                  <Trash2 className="h-4 w-4" />
+                  Delete
+                </Button>
+              </div>
+            </div>
+          ))}
+        </div>
       )}
 
       <Dialog open={formOpen} onOpenChange={setFormOpen}>
-        <DialogContent className="sm:max-w-md">
+        <DialogContent className="border-white/20 bg-white/10 backdrop-blur-lg sm:max-w-md">
           <DialogHeader>
             <DialogTitle>{editing ? "Edit User" : "Add User"}</DialogTitle>
           </DialogHeader>
           <div className="space-y-3">
             <div className="flex flex-col gap-1.5">
-              <Label className="text-white/50">Name</Label>
+              <Label className="text-white/80">Name</Label>
               <Input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
             </div>
             <div className="flex flex-col gap-1.5">
-              <Label className="text-white/50">Email</Label>
+              <Label className="text-white/80">Email</Label>
               <Input value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} />
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div className="flex flex-col gap-1.5">
-                <Label className="text-white/50">Role</Label>
-                <select
-                  value={form.role}
-                  onChange={(e) => setForm({ ...form, role: e.target.value as UserRole })}
-                  className="h-10 rounded-lg border border-white/10 bg-white/5 px-3 text-sm text-white/85 backdrop-blur-md"
-                >
-                  <option value="Customer">Customer</option>
-                  <option value="VIP">VIP</option>
-                  <option value="Admin">Admin</option>
-                </select>
+                <Label className="text-white/80">Role</Label>
+                <Select value={form.role} onValueChange={(value) => setForm({ ...form, role: value as UserRole })}>
+                  <SelectTrigger className="h-10 rounded-lg border border-white/20 bg-white/10 text-white backdrop-blur-lg hover:bg-white/10 data-[placeholder]:text-gray-300">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent className="border border-white/10 bg-slate-900 text-white">
+                    <SelectItem className="focus:bg-white/10 focus:text-white data-[state=checked]:bg-blue-500/20 data-[state=checked]:text-blue-200" value="Admin">Admin</SelectItem>
+                    <SelectItem className="focus:bg-white/10 focus:text-white data-[state=checked]:bg-blue-500/20 data-[state=checked]:text-blue-200" value="Sub Admin">Sub Admin</SelectItem>
+                    <SelectItem className="focus:bg-white/10 focus:text-white data-[state=checked]:bg-blue-500/20 data-[state=checked]:text-blue-200" value="Editor">Editor</SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
               <div className="flex flex-col gap-1.5">
-                <Label className="text-white/50">Joined</Label>
-                <Input
-                  type="date"
-                  value={form.joinedAt}
-                  onChange={(e) => setForm({ ...form, joinedAt: e.target.value })}
-                />
+                <Label className="text-white/80">Status</Label>
+                <Select value={form.status} onValueChange={(value) => setForm({ ...form, status: value as UserStatus })}>
+                  <SelectTrigger className="h-10 rounded-lg border border-white/20 bg-white/10 text-white backdrop-blur-lg hover:bg-white/10 data-[placeholder]:text-gray-300">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent className="border border-white/10 bg-slate-900 text-white">
+                    <SelectItem className="focus:bg-white/10 focus:text-white data-[state=checked]:bg-blue-500/20 data-[state=checked]:text-blue-200" value="Active">Active</SelectItem>
+                    <SelectItem className="focus:bg-white/10 focus:text-white data-[state=checked]:bg-blue-500/20 data-[state=checked]:text-blue-200" value="Inactive">Inactive</SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
             </div>
             <Button onClick={handleSave} className="w-full">
