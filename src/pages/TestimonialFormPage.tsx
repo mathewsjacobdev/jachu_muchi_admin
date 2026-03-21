@@ -90,39 +90,78 @@ const TestimonialFormPage = () => {
         )}
       />
 
-      <form onSubmit={onSave} className="space-y-4 rounded-xl border border-white/10 bg-white/10 p-6 shadow-lg backdrop-blur-lg">
-        <div className="space-y-2">
-          <Label className="text-gray-200">Image</Label>
-          <div className="overflow-hidden rounded-lg border border-white/10 bg-white/5">
-            {previewUrl ? (
-              <img src={previewUrl} alt="Preview" className="h-44 w-full object-cover" />
-            ) : (
-              <div className="flex h-44 w-full items-center justify-center text-white/40">
-                <ImagePlus className="h-10 w-10" />
-              </div>
-            )}
+      <form onSubmit={onSave} className="grid grid-cols-1 gap-6 lg:grid-cols-3">
+        <div className="space-y-4 lg:col-span-2">
+          <div className="space-y-5 rounded-xl border border-white/10 bg-white/5 p-6">
+            <h2 className="text-base font-semibold text-gray-100">Testimonial Details</h2>
+
+            <div className="space-y-2">
+              <Label className="text-sm text-gray-300">Name</Label>
+              <Input
+                value={form.name}
+                onChange={(e) => setForm({ ...form, name: e.target.value })}
+                className="h-12 rounded-lg border-white/20 bg-white/10 focus-visible:border-blue-500"
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label className="text-sm text-gray-300">Course</Label>
+              <Input
+                value={form.course}
+                onChange={(e) => setForm({ ...form, course: e.target.value })}
+                className="h-12 rounded-lg border-white/20 bg-white/10 focus-visible:border-blue-500"
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label className="text-sm text-gray-300">Message</Label>
+              <Textarea
+                rows={7}
+                value={form.message}
+                onChange={(e) => setForm({ ...form, message: e.target.value })}
+                className="rounded-lg border-white/20 bg-white/10 focus-visible:border-blue-500"
+              />
+            </div>
+
+            <div className="flex gap-2">
+              <Button type="submit">{isEdit ? "Save Changes" : "Save Testimonial"}</Button>
+              <Button type="button" variant="outline" onClick={() => navigate("/testimonials")}>
+                Cancel
+              </Button>
+            </div>
           </div>
-          <Input type="file" accept="image/*" onChange={onImageChange} />
-          {imageError ? <p className="text-sm text-red-400">{imageError}</p> : null}
         </div>
 
-        <div className="space-y-1.5">
-          <Label className="text-white/80">Name</Label>
-          <Input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
-        </div>
-        <div className="space-y-1.5">
-          <Label className="text-white/80">Course</Label>
-          <Input value={form.course} onChange={(e) => setForm({ ...form, course: e.target.value })} />
-        </div>
-        <div className="space-y-1.5">
-          <Label className="text-white/80">Message</Label>
-          <Textarea rows={5} value={form.message} onChange={(e) => setForm({ ...form, message: e.target.value })} />
-        </div>
+        <aside className="lg:col-span-1">
+          <div className="rounded-xl border border-white/10 bg-white/5 p-6">
+            <h2 className="text-base font-semibold text-gray-100">Profile Image</h2>
+            <p className="mt-1 text-xs text-gray-400">Upload an optional profile image for this testimonial.</p>
 
-        <div className="flex gap-2">
-          <Button type="submit">{isEdit ? "Save Changes" : "Save Testimonial"}</Button>
-          <Button type="button" variant="outline" onClick={() => navigate("/testimonials")}>Cancel</Button>
-        </div>
+            <label
+              htmlFor="testimonial-image-upload"
+              className="mt-4 flex cursor-pointer flex-col items-center justify-center gap-3 rounded-xl border border-dashed border-white/20 bg-white/5 p-4 text-center transition-all duration-200 hover:border-blue-500/60 hover:bg-white/10"
+            >
+              {previewUrl ? (
+                <img src={previewUrl} alt="Preview" className="h-52 w-full rounded-lg object-cover" />
+              ) : (
+                <>
+                  <div className="flex h-12 w-12 items-center justify-center rounded-full bg-white/10 text-white/70">
+                    <ImagePlus className="h-6 w-6" />
+                  </div>
+                  <p className="text-sm text-gray-300">Click to upload</p>
+                </>
+              )}
+            </label>
+            <Input
+              id="testimonial-image-upload"
+              type="file"
+              accept="image/*"
+              className="sr-only"
+              onChange={onImageChange}
+            />
+            {imageError ? <p className="mt-2 text-sm text-red-400">{imageError}</p> : null}
+          </div>
+        </aside>
       </form>
     </div>
   );
