@@ -7,8 +7,10 @@ import {
   ShoppingCart,
   GitBranch,
   Images,
+  ImageUp,
   Newspaper,
   MessageSquareText,
+  BookOpenText,
   MessagesSquare,
   GraduationCap,
   Users,
@@ -24,6 +26,7 @@ const navSections = [
     items: [
       { label: "Dashboard", icon: LayoutDashboard, href: "/" },
       { label: "Enquiries", icon: MessageSquareText, href: "/enquiries" },
+      { label: "Course Enquiries", icon: BookOpenText, href: "/course-enquiries" },
       { label: "News", icon: Newspaper, href: "/news" },
     ],
   },
@@ -42,6 +45,7 @@ const navSections = [
       { label: "Orders", icon: ShoppingCart, href: "/orders" },
       { label: "Branches", icon: GitBranch, href: "/branches" },
       { label: "Gallery", icon: Images, href: "/gallery" },
+      { label: "Banners", icon: ImageUp, href: "/banners" },
       { label: "Users", icon: Users, href: "/users" },
       { label: "Settings", icon: Settings, href: "/settings" },
     ],
@@ -76,7 +80,7 @@ const AdminSidebar = ({ collapsed, onToggle, mobile = false }: AdminSidebarProps
             animate={{ opacity: 1 }}
             className="truncate text-base font-semibold text-gray-100"
           >
-            OpticAdmin
+             V Trust
           </motion.span>
         )}
       </div>

@@ -3,6 +3,7 @@ import { Eye, Search, Trash2, ChevronDown, Loader2 } from "lucide-react";
 import { Link } from "react-router-dom";
 import PageHeader from "@/components/shared/PageHeader";
 import { ResponsiveTable } from "@/components/ui/ResponsiveTable";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 type EnquiryStatus = "New" | "Contacted" | "Interested" | "Converted" | "Closed";
 
@@ -151,22 +152,20 @@ const EnquiriesPage = () => {
             />
           </div>
 
-          <div className="relative w-full sm:w-52">
-            <select
-              value={statusFilter}
-              onChange={(event) =>
-                setStatusFilter(event.target.value as "All" | EnquiryStatus)
-              }
-              className="h-10 w-full appearance-none rounded-lg border border-white/20 bg-white/10 px-3.5 pr-9 text-sm text-gray-100 shadow-sm backdrop-blur-lg transition-all duration-200 hover:bg-white/15 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
-            >
-              <option value="All">All Status</option>
-              {STATUS_OPTIONS.map((status) => (
-                <option key={status} value={status}>
-                  {status}
-                </option>
-              ))}
-            </select>
-            <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+          <div className="w-full sm:w-52">
+            <Select value={statusFilter} onValueChange={(value) => setStatusFilter(value as "All" | EnquiryStatus)}>
+              <SelectTrigger className="h-10 w-full rounded-lg border border-white/20 bg-white/10 text-white backdrop-blur-lg hover:bg-white/10 data-[placeholder]:text-gray-300">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent className="border border-white/10 bg-slate-900 text-white">
+                <SelectItem className="focus:bg-white/10 focus:text-white data-[state=checked]:bg-blue-500/20 data-[state=checked]:text-blue-200" value="All">All Status</SelectItem>
+                {STATUS_OPTIONS.map((status) => (
+                  <SelectItem key={status} className="focus:bg-white/10 focus:text-white data-[state=checked]:bg-blue-500/20 data-[state=checked]:text-blue-200" value={status}>
+                    {status}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
         </div>
       </div>
@@ -235,26 +234,24 @@ const EnquiriesPage = () => {
                   >
                     {enquiry.status}
                   </span>
-                  <div className="relative">
-                    <select
-                      value={enquiry.status}
-                      onChange={(event) =>
-                        handleStatusChange(
-                          enquiry.id,
-                          event.target.value as EnquiryStatus,
-                        )
-                      }
-                      className="h-8 appearance-none rounded-lg border border-white/20 bg-white/10 px-2.5 pr-7 text-xs font-semibold text-gray-100 shadow-sm backdrop-blur-lg transition-all duration-200 hover:bg-white/15 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  <Select
+                    value={enquiry.status}
+                    onValueChange={(value) => handleStatusChange(enquiry.id, value as EnquiryStatus)}
+                  >
+                    <SelectTrigger
                       aria-label={`Change status for ${enquiry.name}`}
+                      className="h-8 w-[132px] rounded-lg border border-white/20 bg-white/10 px-2.5 text-xs font-semibold text-white backdrop-blur-lg hover:bg-white/10"
                     >
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent className="border border-white/10 bg-slate-900 text-white">
                       {STATUS_OPTIONS.map((status) => (
-                        <option key={status} value={status}>
+                        <SelectItem key={status} className="focus:bg-white/10 focus:text-white data-[state=checked]:bg-blue-500/20 data-[state=checked]:text-blue-200" value={status}>
                           {status}
-                        </option>
+                        </SelectItem>
                       ))}
-                    </select>
-                    <ChevronDown className="pointer-events-none absolute right-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-gray-400" />
-                  </div>
+                    </SelectContent>
+                  </Select>
                 </div>
               ),
               renderMobile: (enquiry) => (

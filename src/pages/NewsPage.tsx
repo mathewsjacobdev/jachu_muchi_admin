@@ -1,26 +1,14 @@
 import { useMemo, useState } from "react";
-import { MOCK_NEWS } from "@/lib/mock-data";
-import { NewsItem } from "@/types";
+import { useNavigate } from "react-router-dom";
 import DeleteModal from "@/components/shared/DeleteModal";
 import PageHeader from "@/components/shared/PageHeader";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
-import { Label } from "@/components/ui/label";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Plus, Pencil, Trash2, Calendar, Search, LayoutGrid, Rows3, Newspaper } from "lucide-react";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Plus, Pencil, Trash2, Calendar, Search, Newspaper, Image as ImageIcon } from "lucide-react";
+import { NewsStatus, listNews, removeNews } from "@/lib/news-store";
 
-type NewsStatus = "Published" | "Draft";
-type ViewMode = "grid" | "table";
 type StatusFilter = "All" | NewsStatus;
-
-const emptyNews: Omit<NewsItem, "id"> = {
-  title: "",
-  description: "",
-  image: "",
-  date: "",
-  status: "Draft",
-};
 
 const statusClasses: Record<NewsStatus, string> = {
   Published: "border border-green-400/20 bg-green-400/10 text-green-300",
@@ -28,15 +16,11 @@ const statusClasses: Record<NewsStatus, string> = {
 };
 
 const NewsPage = () => {
-  const [news, setNews] = useState<NewsItem[]>(MOCK_NEWS);
-  const [formOpen, setFormOpen] = useState(false);
-  const [editing, setEditing] = useState<NewsItem | null>(null);
-  const [form, setForm] = useState(emptyNews);
-  const [titleError, setTitleError] = useState("");
+  const navigate = useNavigate();
+  const [news, setNews] = useState(() => listNews());
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("All");
-  const [viewMode, setViewMode] = useState<ViewMode>("grid");
 
   const filteredNews = useMemo(() => {
     const query = search.trim().toLowerCase();
@@ -51,42 +35,11 @@ const NewsPage = () => {
     [news],
   );
 
-  const openAdd = () => {
-    setEditing(null);
-    setTitleError("");
-    setForm({ ...emptyNews, date: new Date().toISOString().split("T")[0], status: "Draft" });
-    setFormOpen(true);
-  };
-
-  const openEdit = (n: NewsItem) => {
-    setEditing(n);
-    setTitleError("");
-    setForm({
-      title: n.title,
-      description: n.description,
-      image: n.image,
-      date: n.date,
-      status: n.status ?? "Draft",
-    });
-    setFormOpen(true);
-  };
-
-  const handleSave = () => {
-    if (!form.title.trim()) {
-      setTitleError("Title is required.");
-      return;
-    }
-    setTitleError("");
-    if (editing) {
-      setNews(news.map((n) => n.id === editing.id ? { ...n, ...form } : n));
-    } else {
-      setNews([{ id: Date.now().toString(), ...form }, ...news]);
-    }
-    setFormOpen(false);
-  };
-
   const handleDelete = () => {
-    if (deleteId) setNews(news.filter((n) => n.id !== deleteId));
+    if (deleteId) {
+      removeNews(deleteId);
+      setNews(listNews());
+    }
     setDeleteId(null);
   };
 
@@ -97,7 +50,7 @@ const NewsPage = () => {
         description="Create, publish, and manage announcements from one dashboard."
         action={(
           <Button
-            onClick={openAdd}
+            onClick={() => navigate("/news/new")}
             size="sm"
             className="h-9 rounded-lg bg-blue-600 px-3.5 font-semibold text-white shadow-md transition-all duration-200 hover:scale-[1.02] hover:shadow-xl hover:bg-blue-700"
           >
@@ -134,41 +87,16 @@ const NewsPage = () => {
             />
           </div>
           <div className="flex w-full flex-col gap-2 sm:flex-row sm:items-center sm:justify-end md:w-auto">
-            <select
-              value={statusFilter}
-              onChange={(e) => setStatusFilter(e.target.value as StatusFilter)}
-              className="h-10 w-full rounded-lg border border-white/20 bg-white/10 px-3.5 text-sm font-medium text-gray-100 shadow-sm backdrop-blur-lg transition-all duration-200 hover:bg-white/15 focus:outline-none focus:ring-2 focus:ring-blue-500 sm:w-44"
-            >
-              <option value="All">All Status</option>
-              <option value="Published">Published</option>
-              <option value="Draft">Draft</option>
-            </select>
-            <div className="inline-flex w-full rounded-lg border border-white/20 bg-white/10 p-1 backdrop-blur-lg sm:w-auto">
-            <button
-              type="button"
-              onClick={() => setViewMode("grid")}
-              className={`inline-flex flex-1 items-center justify-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-semibold transition-all duration-200 md:flex-none ${
-                viewMode === "grid"
-                  ? "bg-white/15 text-gray-100 shadow-sm"
-                  : "text-gray-300 hover:bg-white/10"
-              }`}
-            >
-              <LayoutGrid className="h-4 w-4" />
-              Grid
-            </button>
-            <button
-              type="button"
-              onClick={() => setViewMode("table")}
-              className={`inline-flex flex-1 items-center justify-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-semibold transition-all duration-200 md:flex-none ${
-                viewMode === "table"
-                  ? "bg-white/15 text-gray-100 shadow-sm"
-                  : "text-gray-300 hover:bg-white/10"
-              }`}
-            >
-              <Rows3 className="h-4 w-4" />
-              Table
-            </button>
-            </div>
+            <Select value={statusFilter} onValueChange={(value) => setStatusFilter(value as StatusFilter)}>
+              <SelectTrigger className="h-10 w-full rounded-lg border border-white/20 bg-white/10 text-white backdrop-blur-lg hover:bg-white/10 data-[placeholder]:text-gray-300 sm:w-44">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent className="border border-white/10 bg-slate-900 text-white">
+                <SelectItem className="focus:bg-white/10 focus:text-white data-[state=checked]:bg-blue-500/20 data-[state=checked]:text-blue-200" value="All">All Status</SelectItem>
+                <SelectItem className="focus:bg-white/10 focus:text-white data-[state=checked]:bg-blue-500/20 data-[state=checked]:text-blue-200" value="Published">Published</SelectItem>
+                <SelectItem className="focus:bg-white/10 focus:text-white data-[state=checked]:bg-blue-500/20 data-[state=checked]:text-blue-200" value="Draft">Draft</SelectItem>
+              </SelectContent>
+            </Select>
           </div>
         </div>
       </div>
@@ -183,19 +111,19 @@ const NewsPage = () => {
             Try a different title search or add a new article.
           </p>
         </div>
-      ) : viewMode === "grid" ? (
-        <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
+      ) : (
+        <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
           {filteredNews.map((n) => (
             <div
               key={n.id}
-              className="group overflow-hidden rounded-xl border border-white/20 bg-white/10 shadow-lg backdrop-blur-lg transition-all duration-300 hover:scale-[1.02] hover:shadow-2xl"
+              className="group overflow-hidden rounded-xl border border-white/10 bg-gradient-to-br from-[#0f172a] to-[#1e293b] shadow-lg transition-all duration-300 hover:-translate-y-1 hover:shadow-2xl"
             >
-              {n.image && (
-                <img
-                  src={n.image}
-                  alt={n.title}
-                  className="h-44 w-full object-cover transition-transform duration-500 group-hover:scale-[1.03]"
-                />
+              {n.image ? (
+                <img src={n.image} alt={n.title} className="h-44 w-full object-cover transition-transform duration-500 group-hover:scale-[1.03]" />
+              ) : (
+                <div className="flex h-44 w-full items-center justify-center bg-white/5 text-white/30">
+                  <ImageIcon className="h-10 w-10" />
+                </div>
               )}
               <div className="space-y-3.5 p-3 sm:p-4 md:p-5">
                 <div className="flex items-center justify-between gap-2">
@@ -212,8 +140,17 @@ const NewsPage = () => {
                   <p className="line-clamp-2 text-sm leading-6 text-gray-300">{n.description}</p>
                 </div>
                 <div className="flex gap-2">
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    className="h-9"
+                    onClick={() => navigate(`/news/${n.id}`)}
+                  >
+                    View
+                  </Button>
                   <button
-                    onClick={() => openEdit(n)}
+                    onClick={() => navigate(`/news/edit/${n.id}`)}
                     className="inline-flex h-9 w-9 items-center justify-center rounded-lg bg-white/10 text-blue-300 shadow-sm transition-all duration-200 hover:scale-[1.02] hover:shadow-xl hover:bg-white/20"
                     aria-label={`Edit ${n.title}`}
                   >
@@ -231,137 +168,7 @@ const NewsPage = () => {
             </div>
           ))}
         </div>
-      ) : (
-        <div className="overflow-x-auto rounded-xl border border-white/20 bg-white/10 shadow-lg backdrop-blur-lg transition-all duration-300 hover:scale-[1.02] hover:shadow-2xl">
-          <table className="min-w-full divide-y divide-white/10 text-xs sm:text-sm">
-            <thead className="bg-white/5">
-              <tr>
-                <th className="whitespace-nowrap px-5 py-3.5 text-left text-xs font-semibold uppercase tracking-[0.08em] text-gray-300">
-                  Title
-                </th>
-                <th className="whitespace-nowrap px-5 py-3.5 text-left text-xs font-semibold uppercase tracking-[0.08em] text-white/50">
-                  Date
-                </th>
-                <th className="whitespace-nowrap px-5 py-3.5 text-left text-xs font-semibold uppercase tracking-[0.08em] text-white/50">
-                  Status
-                </th>
-                <th className="whitespace-nowrap px-5 py-3.5 text-right text-xs font-semibold uppercase tracking-[0.08em] text-white/50">
-                  Actions
-                </th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-white/10 bg-transparent">
-              {filteredNews.map((n) => (
-                <tr key={n.id} className="transition-colors duration-200 hover:bg-white/10">
-                  <td className="px-5 py-4">
-                    <p className="line-clamp-1 text-sm font-semibold text-gray-100">{n.title}</p>
-                  </td>
-                  <td className="whitespace-nowrap px-5 py-4 text-sm text-gray-300">{n.date}</td>
-                  <td className="whitespace-nowrap px-5 py-4">
-                    <span className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ring-1 ring-inset transition-all duration-200 ${statusClasses[n.status]}`}>
-                      {n.status}
-                    </span>
-                  </td>
-                  <td className="whitespace-nowrap px-5 py-4 text-right">
-                    <div className="inline-flex items-center gap-2">
-                      <button
-                        onClick={() => openEdit(n)}
-                        className="inline-flex h-9 w-9 items-center justify-center rounded-lg bg-white/10 text-blue-300 shadow-sm transition-all duration-200 hover:scale-[1.02] hover:shadow-xl hover:bg-white/20"
-                        aria-label={`Edit ${n.title}`}
-                      >
-                        <Pencil className="h-4 w-4" />
-                      </button>
-                      <button
-                        onClick={() => setDeleteId(n.id)}
-                        className="inline-flex h-9 w-9 items-center justify-center rounded-lg bg-white/10 text-red-300 shadow-sm transition-all duration-200 hover:scale-[1.02] hover:shadow-xl hover:bg-white/20"
-                        aria-label={`Delete ${n.title}`}
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
       )}
-
-      <Dialog open={formOpen} onOpenChange={setFormOpen}>
-        <DialogContent className="sm:max-w-lg">
-          <DialogHeader>
-            <DialogTitle className="text-lg font-semibold tracking-tight text-white">
-              {editing ? "Edit Article" : "Add Article"}
-            </DialogTitle>
-          </DialogHeader>
-          <div className="space-y-4">
-            <div className="flex flex-col gap-1.5">
-              <Label className="text-xs font-semibold uppercase tracking-wide text-gray-300">Title</Label>
-              <Input
-                value={form.title}
-                onChange={(e) => {
-                  setForm({ ...form, title: e.target.value });
-                  if (titleError) setTitleError("");
-                }}
-                className={titleError ? "h-10 border-red-300 focus-visible:ring-red-200" : "h-10"}
-              />
-              {titleError && <p className="text-xs text-red-400">{titleError}</p>}
-            </div>
-
-            <div className="flex flex-col gap-1.5">
-              <Label className="text-xs font-semibold uppercase tracking-wide text-gray-300">Description</Label>
-              <Textarea
-                value={form.description}
-                onChange={(e) => setForm({ ...form, description: e.target.value })}
-                rows={4}
-                className="min-h-[96px]"
-              />
-            </div>
-
-            <div className="grid gap-4 sm:grid-cols-2">
-              <div className="flex flex-col gap-1.5">
-                <Label className="text-xs font-semibold uppercase tracking-wide text-gray-300">Date</Label>
-                <Input
-                  type="date"
-                  value={form.date}
-                  onChange={(e) => setForm({ ...form, date: e.target.value })}
-                  className="h-10"
-                />
-              </div>
-
-              <div className="flex flex-col gap-1.5">
-                <Label className="text-xs font-semibold uppercase tracking-wide text-gray-300">Status</Label>
-                <select
-                  value={form.status}
-                  onChange={(e) => setForm({ ...form, status: e.target.value as NewsStatus })}
-                  className="h-10 rounded-lg border border-white/20 bg-white/10 px-3 text-sm text-gray-100 shadow-sm backdrop-blur-lg transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                >
-                  <option value="Published">Published</option>
-                  <option value="Draft">Draft</option>
-                </select>
-              </div>
-            </div>
-
-            <div className="flex flex-col gap-1.5">
-              <Label className="text-xs font-semibold uppercase tracking-wide text-gray-300">Image URL</Label>
-              <Input
-                value={form.image}
-                onChange={(e) => setForm({ ...form, image: e.target.value })}
-                className="h-10"
-              />
-            </div>
-
-            <div className="flex justify-end gap-2 pt-2">
-              <Button variant="outline" onClick={() => setFormOpen(false)} className="h-9">
-                Cancel
-              </Button>
-              <Button onClick={handleSave} className="h-9">
-                {editing ? "Update Article" : "Publish Article"}
-              </Button>
-            </div>
-          </div>
-        </DialogContent>
-      </Dialog>
 
       <DeleteModal open={!!deleteId} onOpenChange={() => setDeleteId(null)} onConfirm={handleDelete} title="Delete article" />
     </div>

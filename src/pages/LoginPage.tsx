@@ -4,12 +4,12 @@ import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Glasses, Eye, EyeOff } from "lucide-react";
-import { motion } from "framer-motion";
+import { Eye, EyeOff } from "lucide-react";
 
 const LoginPage = () => {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [remember, setRemember] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [errors, setErrors] = useState<{ email?: string; password?: string; general?: string }>({});
   const { login } = useAuth();
@@ -34,85 +34,100 @@ const LoginPage = () => {
   };
 
   return (
-    <div className="relative flex min-h-screen items-center justify-center overflow-hidden bg-gradient-to-br from-[#0f172a] via-[#020617] to-[#020617] p-4 sm:p-6">
-      <div className="pointer-events-none absolute -left-24 top-16 h-56 w-56 rounded-full bg-blue-500/20 blur-3xl" />
-      <div className="pointer-events-none absolute right-0 top-0 h-72 w-72 rounded-full bg-purple-500/15 blur-3xl" />
-      <div className="pointer-events-none absolute bottom-10 left-1/2 h-64 w-64 -translate-x-1/2 rounded-full bg-cyan-500/10 blur-3xl" />
-
-      <motion.div
-        initial={{ opacity: 0, scale: 0.96, y: 12 }}
-        animate={{ opacity: 1, scale: 1, y: 0 }}
-        transition={{ duration: 0.35, ease: "easeOut" }}
-        className="relative w-full max-w-md"
-      >
-        <div className="rounded-2xl border border-white/20 bg-white/10 p-6 shadow-2xl backdrop-blur-xl transition-all duration-300 hover:shadow-[0_20px_60px_rgba(15,23,42,0.45)] sm:p-8">
-          <div className="mb-8 flex flex-col items-center gap-3 text-center">
-            <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-to-r from-blue-500 to-purple-500 text-white shadow-lg">
-              <Glasses className="h-6 w-6" />
+    <div className="min-h-screen bg-slate-100 p-4 sm:p-6">
+      <div className="mx-auto grid min-h-[calc(100vh-2rem)] max-w-7xl grid-cols-1 overflow-hidden rounded-xl bg-white shadow-[0_20px_60px_rgba(15,23,42,0.12)] sm:min-h-[calc(100vh-3rem)] lg:grid-cols-2">
+        <div className="flex items-center justify-center p-6 sm:p-10 lg:p-14">
+          <div className="w-full max-w-md">
+            <div className="mb-8">
+              <h1 className="text-3xl font-bold text-slate-900 sm:text-4xl">Welcome Back</h1>
+              <p className="mt-2 text-sm text-slate-500">
+                Sign in to continue managing your dashboard.
+              </p>
             </div>
-            <div>
-              <h1 className="text-2xl font-semibold text-white">Welcome back</h1>
-              <p className="mt-1 text-sm text-gray-400">Sign in to OpticAdmin</p>
+
+            <form onSubmit={handleSubmit} className="space-y-5">
+              {errors.general && (
+                <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-600">
+                  {errors.general}
+                </div>
+              )}
+
+              <div className="flex flex-col gap-1.5">
+                <Label htmlFor="email" className="text-slate-700">Email</Label>
+                <Input
+                  id="email"
+                  type="email"
+                  placeholder="admin@optic.com"
+                  value={email}
+                  onChange={(e) => { setEmail(e.target.value); setErrors({}); }}
+                  className="h-12 rounded-xl border-slate-200 bg-white px-4 text-slate-900 shadow-sm placeholder:text-slate-400 focus-visible:border-blue-500"
+                />
+                {errors.email && <span className="text-xs text-red-500">{errors.email}</span>}
+              </div>
+
+              <div className="flex flex-col gap-1.5">
+                <Label htmlFor="password" className="text-slate-700">Password</Label>
+                <div className="relative">
+                  <Input
+                    id="password"
+                    type={showPassword ? "text" : "password"}
+                    placeholder="••••••"
+                    value={password}
+                    onChange={(e) => { setPassword(e.target.value); setErrors({}); }}
+                    className="h-12 rounded-xl border-slate-200 bg-white px-4 pr-12 text-slate-900 shadow-sm placeholder:text-slate-400 focus-visible:border-blue-500"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword(!showPassword)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 rounded-md p-1 text-slate-500 transition-colors hover:text-slate-700"
+                    aria-label={showPassword ? "Hide password" : "Show password"}
+                  >
+                    {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                  </button>
+                </div>
+                {errors.password && <span className="text-xs text-red-500">{errors.password}</span>}
+              </div>
+
+              <div className="flex items-center justify-between">
+                <label className="inline-flex items-center gap-2 text-sm text-slate-600">
+                  <input
+                    type="checkbox"
+                    checked={remember}
+                    onChange={(e) => setRemember(e.target.checked)}
+                    className="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+                  />
+                  Remember me
+                </label>
+                <Link to="/forgot-password" className="text-sm font-medium text-blue-600 transition-colors hover:text-blue-500">
+                  Forgot password?
+                </Link>
+              </div>
+
+              <Button
+                type="submit"
+                className="h-12 w-full rounded-xl bg-blue-600 text-white shadow-sm hover:bg-blue-700"
+              >
+                Sign in
+              </Button>
+            </form>
+          </div>
+        </div>
+
+        <div className="hidden p-5 lg:block">
+          <div className="flex h-full items-center justify-center rounded-xl bg-gradient-to-br from-purple-600 via-blue-600 to-indigo-700 p-8">
+            <div className="w-full max-w-xl">
+              <img
+                src="https://images.unsplash.com/photo-1517048676732-d65bc937f952?w=900&h=900&fit=crop"
+                alt="Team collaboration"
+                className="h-[460px] w-full rounded-xl object-cover shadow-2xl"
+              />
+              <p className="mt-5 text-center text-sm text-blue-100/90">
+                Manage courses, leads, and growth from a single modern dashboard.
+              </p>
             </div>
           </div>
-
-          <form onSubmit={handleSubmit} className="space-y-5">
-            {errors.general && (
-              <div className="rounded-lg border border-red-400/20 bg-red-400/10 px-4 py-3 text-sm text-red-200">
-                {errors.general}
-              </div>
-            )}
-
-            <div className="flex flex-col gap-1.5">
-              <Label htmlFor="email" className="text-gray-200">Email</Label>
-              <Input
-                id="email"
-                type="email"
-                placeholder="admin@optic.com"
-                value={email}
-                onChange={(e) => { setEmail(e.target.value); setErrors({}); }}
-                className="h-12 border-white/20 bg-white/10 px-4 py-3 text-white placeholder:text-gray-400 focus-visible:border-blue-500"
-              />
-              {errors.email && <span className="text-xs text-red-300">{errors.email}</span>}
-            </div>
-
-            <div className="flex flex-col gap-1.5">
-              <Label htmlFor="password" className="text-gray-200">Password</Label>
-              <div className="relative">
-                <Input
-                  id="password"
-                  type={showPassword ? "text" : "password"}
-                  placeholder="••••••"
-                  value={password}
-                  onChange={(e) => { setPassword(e.target.value); setErrors({}); }}
-                  className="h-12 border-white/20 bg-white/10 px-4 py-3 pr-12 text-white placeholder:text-gray-400 focus-visible:border-blue-500"
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 rounded-md p-1 text-gray-400 transition-colors hover:text-white"
-                >
-                  {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                </button>
-              </div>
-              {errors.password && <span className="text-xs text-red-300">{errors.password}</span>}
-            </div>
-
-            <div className="flex justify-end">
-              <Link to="/forgot-password" className="text-sm text-blue-400 transition-colors hover:text-blue-300 hover:underline">
-                Forgot password?
-              </Link>
-            </div>
-
-            <Button
-              type="submit"
-              className="h-12 w-full bg-gradient-to-r from-blue-500 to-indigo-600 text-white shadow-lg transition-all duration-300 hover:from-blue-600 hover:to-indigo-700 hover:shadow-xl"
-            >
-              Sign in
-            </Button>
-          </form>
         </div>
-      </motion.div>
+      </div>
     </div>
   );
 };
