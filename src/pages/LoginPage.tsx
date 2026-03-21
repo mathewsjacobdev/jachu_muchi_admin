@@ -113,17 +113,19 @@ const LoginPage = () => {
           </div>
         </div>
 
-        <div className="hidden p-5 lg:block">
-          <div className="flex h-full items-center justify-center rounded-xl bg-gradient-to-br from-purple-600 via-blue-600 to-indigo-700 p-8">
-            <div className="w-full max-w-xl">
-              <img
-                src="https://images.unsplash.com/photo-1517048676732-d65bc937f952?w=900&h=900&fit=crop"
-                alt="Team collaboration"
-                className="h-[460px] w-full rounded-xl object-cover shadow-2xl"
-              />
-              <p className="mt-5 text-center text-sm text-blue-100/90">
-                Manage courses, leads, and growth from a single modern dashboard.
-              </p>
+        <div className="hidden p-10 lg:block">
+          <div className="flex h-full items-center justify-center">
+            <div className="w-full max-w-2xl rounded-2xl border border-gray-200 bg-slate-50 p-6 shadow-lg transition-all duration-300 hover:shadow-xl">
+              <div className="flex min-h-[520px] flex-col items-center justify-center">
+                <img
+                  src="https://img.freepik.com/free-vector/fingerprint-concept-illustration_114360-4398.jpg?w=740"
+                  alt="Authentication illustration"
+                  className="mx-auto max-h-[350px] w-full object-contain"
+                />
+                <p className="mt-5 text-center text-sm text-gray-600">
+                  Manage courses, leads, and growth from one modern dashboard.
+                </p>
+              </div>
             </div>
           </div>
         </div>

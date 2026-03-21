@@ -42,7 +42,7 @@ const navSections = [
   {
     label: "Operations",
     items: [
-      { label: "Orders", icon: ShoppingCart, href: "/orders" },
+      // { label: "Orders", icon: ShoppingCart, href: "/orders" },
       { label: "Branches", icon: GitBranch, href: "/branches" },
       { label: "Gallery", icon: Images, href: "/gallery" },
       { label: "Banners", icon: ImageUp, href: "/banners" },
@@ -70,19 +70,28 @@ const AdminSidebar = ({ collapsed, onToggle, mobile = false }: AdminSidebarProps
         mobile ? "relative h-full" : "fixed left-0 top-0 h-screen"
       }`}
     >
-      <div className="flex h-14 items-center gap-2 px-3">
-        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-primary">
-          <Glasses className="h-4 w-4 text-primary-foreground" />
+      <div className="relative flex h-14 items-center px-3">
+        <div className="flex min-w-0 items-center gap-2">
+          <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-primary">
+            <Glasses className="h-4 w-4 text-primary-foreground" />
+          </div>
+          {!collapsed && (
+            <motion.span
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              className="truncate text-base font-semibold text-gray-100"
+            >
+               V Trust
+            </motion.span>
+          )}
         </div>
-        {!collapsed && (
-          <motion.span
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            className="truncate text-base font-semibold text-gray-100"
-          >
-             V Trust
-          </motion.span>
-        )}
+        <button
+          onClick={onToggle}
+          className="absolute right-[-12px] top-[12px] z-50 flex h-8 w-8 items-center justify-center rounded-full border border-white/10 bg-slate-800 text-gray-200 shadow-md transition-all duration-200 hover:bg-slate-700 hover:text-white"
+          aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+        >
+          {collapsed ? <ChevronRight className="h-4 w-4" /> : <ChevronLeft className="h-4 w-4" />}
+        </button>
       </div>
 
       <nav className="flex-1 space-y-4 overflow-y-auto px-2 py-3">
@@ -124,13 +133,6 @@ const AdminSidebar = ({ collapsed, onToggle, mobile = false }: AdminSidebarProps
           </div>
         ))}
       </nav>
-
-      <button
-        onClick={onToggle}
-        className="mx-2 mb-3 flex items-center justify-center rounded-lg p-2 text-gray-300 transition-all duration-200 hover:scale-[1.02] hover:bg-white/10 hover:text-gray-100"
-      >
-        {collapsed ? <ChevronRight className="h-4 w-4" /> : <ChevronLeft className="h-4 w-4" />}
-      </button>
     </motion.aside>
   );
 };
