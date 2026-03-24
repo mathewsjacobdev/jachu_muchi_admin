@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { ArrowLeft, Clock, X } from "lucide-react";
 
@@ -7,23 +7,36 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { getCourseById, upsertCourse } from "@/lib/course-store";
+import {
+  createCourse,
+  getCourse,
+  updateCourse,
+} from "@/api/services/course.service";
 
 const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
 
 const emptyForm = {
-  title: "",
-  description: "",
+  courseName: "",
+  type: "",
   duration: "",
   eligibility: "",
+  keyDetails: "",
 };
+
+const courseTypeOptions = [
+  "Long-term Fellowship",
+  "Short-term Training",
+  "Fellowship",
+  "Observational Training",
+  "Degree Course",
+  "Postgraduate Medical Training",
+] as const;
 
 const CourseFormPage = () => {
   const { id } = useParams();
   const navigate = useNavigate();
   const isEdit = Boolean(id);
 
-  const existing = useMemo(() => (id ? getCourseById(id) : undefined), [id]);
   const [form, setForm] = useState(emptyForm);
   const [imageFile, setImageFile] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState("");
@@ -31,20 +44,22 @@ const CourseFormPage = () => {
   const [imageError, setImageError] = useState("");
 
   useEffect(() => {
-    if (!isEdit) return;
-    if (!existing) {
-      navigate("/products");
-      return;
+    if (isEdit && id) {
+      getCourse(id)
+        .then((data: any) => {
+          setForm({
+            courseName: data.title || "",
+            type: "Fellowship",
+            duration: "12 Months",
+            eligibility: "Demo",
+            keyDetails: data.body || "",
+          });
+        })
+        .catch((error) => {
+          console.error(error);
+        });
     }
-
-    setForm({
-      title: existing.title,
-      description: existing.description,
-      duration: existing.duration,
-      eligibility: existing.eligibility ?? "",
-    });
-    setPreviewUrl(existing.image ?? "");
-  }, [existing, isEdit, navigate]);
+  }, [id, isEdit]);
 
   useEffect(() => {
     return () => {
@@ -58,7 +73,7 @@ const CourseFormPage = () => {
     setImageError("");
     if (!file) {
       setImageFile(null);
-      setPreviewUrl(existing?.image ?? "");
+      setPreviewUrl("");
       return;
     }
     if (!file.type.startsWith("image/")) return;
@@ -83,21 +98,29 @@ const CourseFormPage = () => {
     event.preventDefault();
   };
 
-  const handleSave = (event: React.FormEvent) => {
-    event.preventDefault();
-    if (!form.title.trim() || !form.description.trim() || !form.duration.trim()) return;
+  const handleSave = async (e: React.FormEvent) => {
+    e.preventDefault();
 
-    upsertCourse({
-      id,
-      title: form.title.trim(),
-      description: form.description.trim(),
-      duration: form.duration.trim(),
-      eligibility: form.eligibility.trim(),
-      image: previewUrl.trim(),
-      status: existing?.status ?? "Active",
-    });
+    const payload = {
+      title: form.courseName,
+      body: form.keyDetails,
+      duration: form.duration,
+      eligibility: form.eligibility,
+      type: form.type,
+      image: previewUrl,
+    };
 
-    navigate("/products");
+    try {
+      if (isEdit && id) {
+        await updateCourse(id, payload);
+      } else {
+        await createCourse(payload);
+      }
+
+      navigate("/courses");
+    } catch (error) {
+      console.error(error);
+    }
   };
 
   const durationLabel = form.duration.trim() || "Duration";
@@ -124,12 +147,27 @@ const CourseFormPage = () => {
           <div className="space-y-5 rounded-xl border border-white/10 bg-gradient-to-br from-[#0f172a] to-[#1e293b] p-6 shadow-lg">
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <div className="space-y-2">
-                <Label className="text-sm font-medium text-gray-200">Course Title</Label>
+                <Label className="text-sm font-medium text-gray-200">Course Name</Label>
                 <Input
-                  value={form.title}
-                  onChange={(e) => setForm((prev) => ({ ...prev, title: e.target.value }))}
-                  placeholder="Enter course title"
+                  value={form.courseName}
+                  onChange={(e) => setForm((prev) => ({ ...prev, courseName: e.target.value }))}
+                  placeholder="Enter course name"
                 />
+              </div>
+              <div className="space-y-2">
+                <Label className="text-sm font-medium text-gray-200">Type</Label>
+                <select
+                  value={form.type}
+                  onChange={(e) => setForm((prev) => ({ ...prev, type: e.target.value }))}
+                  className="flex h-10 w-full rounded-md border border-white/20 bg-white/5 px-3 py-2 text-sm text-gray-200 ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  <option value="" className="bg-slate-900 text-gray-300">Select course type</option>
+                  {courseTypeOptions.map((option) => (
+                    <option key={option} value={option} className="bg-slate-900 text-gray-200">
+                      {option}
+                    </option>
+                  ))}
+                </select>
               </div>
               <div className="space-y-2">
                 <Label className="text-sm font-medium text-gray-200">Duration</Label>
@@ -142,18 +180,18 @@ const CourseFormPage = () => {
             </div>
 
             <div className="space-y-2">
-              <Label className="text-sm font-medium text-gray-200">Description</Label>
+              <Label className="text-sm font-medium text-gray-200">Key Details</Label>
               <Textarea
-                value={form.description}
-                onChange={(e) => setForm((prev) => ({ ...prev, description: e.target.value }))}
-                placeholder="Write a concise course description"
+                value={form.keyDetails}
+                onChange={(e) => setForm((prev) => ({ ...prev, keyDetails: e.target.value }))}
+                placeholder="Write key details"
                 rows={5}
                 className="min-h-[120px]"
               />
             </div>
 
             <div className="space-y-2">
-              <Label className="text-sm font-medium text-gray-200">Eligibility (optional)</Label>
+              <Label className="text-sm font-medium text-gray-200">Eligibility</Label>
               <Input
                 value={form.eligibility}
                 onChange={(e) => setForm((prev) => ({ ...prev, eligibility: e.target.value }))}
@@ -239,10 +277,10 @@ const CourseFormPage = () => {
               )}
               <div className="space-y-2 p-4">
                 <p className="line-clamp-2 text-base font-semibold leading-snug text-white">
-                  {form.title || "Course title"}
+                  {form.courseName || "Course name"}
                 </p>
                 <p className="line-clamp-2 text-sm leading-relaxed text-gray-400">
-                  {form.description || "Description will appear here as you type."}
+                  {form.keyDetails || "Key details will appear here as you type."}
                 </p>
                 <div className="flex flex-wrap items-center gap-2 pt-1">
                   <span className="inline-flex items-center gap-1.5 rounded-full border border-blue-500/30 bg-blue-500/15 px-2.5 py-1 text-xs font-medium text-blue-200">
