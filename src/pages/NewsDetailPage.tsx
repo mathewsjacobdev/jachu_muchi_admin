@@ -1,15 +1,53 @@
+import { useEffect, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
-import { ArrowLeft, Calendar, Image as ImageIcon } from "lucide-react";
+import { ArrowLeft, Calendar, Image as ImageIcon, Loader2 } from "lucide-react";
 
 import PageHeader from "@/components/shared/PageHeader";
 import { Button } from "@/components/ui/button";
-import { getNewsById } from "@/lib/news-store";
+import { getNewsById } from "@/api/services/news.service";
+import type { NewsItem } from "@/types";
 
 const NewsDetailPage = () => {
   const { id } = useParams();
   const navigate = useNavigate();
 
-  const article = id ? getNewsById(id) : undefined;
+  const [article, setArticle] = useState<NewsItem | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    if (!id) {
+      setArticle(null);
+      setLoading(false);
+      return;
+    }
+
+    let cancelled = false;
+    setLoading(true);
+    getNewsById(id)
+      .then((data) => {
+        if (!cancelled) setArticle(data);
+      })
+      .catch((err) => {
+        console.error(err);
+        if (!cancelled) setArticle(null);
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [id]);
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center gap-2 p-6 text-gray-300">
+        <Loader2 className="h-5 w-5 animate-spin" />
+        Loading article...
+      </div>
+    );
+  }
 
   if (!article) {
     return (

@@ -1,17 +1,14 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
-import { ArrowLeft, Plus, X } from "lucide-react";
+import { ArrowLeft, Loader2, Plus, X } from "lucide-react";
 
 import PageHeader from "@/components/shared/PageHeader";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import {
-  BranchStatus,
-  getBranchById,
-  upsertBranch,
-} from "@/lib/branch-store";
+import type { BranchStatus } from "@/lib/branch-store";
+import { createBranch, getBranchById, updateBranchApi } from "@/api/services/branch.service";
 
 const emptyForm = {
   name: "",
@@ -26,28 +23,42 @@ const BranchFormPage = () => {
   const navigate = useNavigate();
   const isEdit = Boolean(id);
 
-  const existing = useMemo(() => (id ? getBranchById(id) : undefined), [id]);
   const [form, setForm] = useState(emptyForm);
   const [phones, setPhones] = useState<string[]>([""]);
   const [phoneError, setPhoneError] = useState("");
+  const [loadError, setLoadError] = useState("");
+  const [editLoading, setEditLoading] = useState(isEdit);
 
   useEffect(() => {
-    if (!isEdit) return;
-    if (!existing) {
-      navigate("/branches");
-      return;
-    }
-    setForm({
-      name: existing.name,
-      email: existing.email,
-      location: existing.location,
-      mapUrl: existing.mapUrl,
-      status: existing.status,
-    });
-    setPhones(
-      existing.phones.length > 0 ? [...existing.phones] : [""],
-    );
-  }, [existing, isEdit, navigate]);
+    if (!isEdit || !id) return;
+
+    const load = async () => {
+      setEditLoading(true);
+      setLoadError("");
+      try {
+        const existing = await getBranchById(id);
+        if (!existing) {
+          navigate("/branches");
+          return;
+        }
+        setForm({
+          name: existing.name,
+          email: existing.email,
+          location: existing.location,
+          mapUrl: existing.mapUrl,
+          status: existing.status,
+        });
+        setPhones(existing.phones.length > 0 ? [...existing.phones] : [""]);
+      } catch (e) {
+        console.error(e);
+        setLoadError("Could not load branch.");
+      } finally {
+        setEditLoading(false);
+      }
+    };
+
+    void load();
+  }, [id, isEdit, navigate]);
 
   const updatePhone = (index: number, value: string) => {
     setPhones((prev) => prev.map((p, i) => (i === index ? value : p)));
@@ -64,7 +75,7 @@ const BranchFormPage = () => {
     if (phoneError) setPhoneError("");
   };
 
-  const handleSave = (e: React.FormEvent) => {
+  const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!form.name.trim()) return;
 
@@ -75,18 +86,46 @@ const BranchFormPage = () => {
     }
     setPhoneError("");
 
-    upsertBranch({
-      id,
+    const payload = {
       name: form.name.trim(),
       phones: normalizedPhones,
       email: form.email.trim(),
       location: form.location.trim(),
       mapUrl: form.mapUrl.trim(),
       status: form.status,
-    });
+    };
 
-    navigate("/branches");
+    try {
+      if (isEdit && id) {
+        await updateBranchApi(id, payload);
+      } else {
+        await createBranch(payload);
+      }
+      navigate("/branches");
+    } catch (err) {
+      console.error(err);
+    }
   };
+
+  if (isEdit && editLoading) {
+    return (
+      <div className="flex flex-col items-center justify-center gap-2 py-24 text-gray-400">
+        <Loader2 className="h-8 w-8 animate-spin" />
+        <p className="text-sm">Loading branch…</p>
+      </div>
+    );
+  }
+
+  if (loadError) {
+    return (
+      <div className="space-y-4 p-4 sm:p-6">
+        <p className="text-sm text-red-400">{loadError}</p>
+        <Button type="button" variant="outline" onClick={() => navigate("/branches")}>
+          Back to branches
+        </Button>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6 p-4 sm:p-6">

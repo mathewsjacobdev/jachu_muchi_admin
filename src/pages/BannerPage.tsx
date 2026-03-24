@@ -1,6 +1,6 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { ImagePlus, Pencil, Trash2 } from "lucide-react";
+import { ImagePlus, Loader2, Pencil, Trash2 } from "lucide-react";
 
 import PageHeader from "@/components/shared/PageHeader";
 import { Button } from "@/components/ui/button";
@@ -8,11 +8,18 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { addBanner, BannerStatus, deleteBanner, listBanners, toggleBannerStatus } from "@/lib/banner-store";
+import type { BannerItem, BannerStatus } from "@/lib/banner-store";
+import {
+  createBanner,
+  deleteBannerApi,
+  getBanners,
+  toggleBannerStatusApi,
+} from "@/api/services/banner.service";
 
 const BannerPage = () => {
   const navigate = useNavigate();
-  const [banners, setBanners] = useState(() => listBanners());
+  const [banners, setBanners] = useState<BannerItem[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
   const [formOpen, setFormOpen] = useState(false);
   const [form, setForm] = useState({
     title: "",
@@ -20,6 +27,22 @@ const BannerPage = () => {
     imageFile: null as File | null,
   });
   const [previewUrl, setPreviewUrl] = useState("");
+  const [saving, setSaving] = useState(false);
+
+  const load = async () => {
+    setIsLoading(true);
+    try {
+      setBanners(await getBanners());
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    void load();
+  }, []);
 
   const onUploadClick = () => {
     if (previewUrl.startsWith("blob:")) {
@@ -41,32 +64,57 @@ const BannerPage = () => {
     setPreviewUrl(URL.createObjectURL(file));
   };
 
-  const onSave = () => {
+  const onSave = async () => {
     if (!form.title.trim() || !previewUrl || !form.imageFile) return;
-    addBanner({
-      title: form.title.trim(),
-      image: previewUrl,
-      status: form.status,
-    });
-    setBanners(listBanners());
-    setFormOpen(false);
+    setSaving(true);
+    try {
+      const created = await createBanner({
+        title: form.title.trim(),
+        image: previewUrl,
+        status: form.status,
+      });
+      setBanners((prev) => [created, ...prev]);
+      setFormOpen(false);
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setSaving(false);
+    }
   };
 
-  const onDelete = (id: string) => {
-    deleteBanner(id);
-    setBanners(listBanners());
+  const onDelete = async (bannerId: string) => {
+    setBanners((prev) => prev.filter((b) => b.id !== bannerId));
+    try {
+      await deleteBannerApi(bannerId);
+    } catch (e) {
+      console.error(e);
+      void load();
+    }
   };
 
-  const onToggleStatus = (id: string) => {
-    toggleBannerStatus(id);
-    setBanners(listBanners());
+  const onToggleStatus = async (banner: BannerItem) => {
+    const prevStatus = banner.status;
+    const next = prevStatus === "Active" ? "Inactive" : "Active";
+    setBanners((list) =>
+      list.map((b) => (b.id === banner.id ? { ...b, status: next } : b)),
+    );
+    try {
+      await toggleBannerStatusApi(banner.id, prevStatus);
+    } catch (e) {
+      console.error(e);
+      setBanners((list) =>
+        list.map((b) => (b.id === banner.id ? { ...b, status: prevStatus } : b)),
+      );
+    }
   };
 
   return (
     <div className="space-y-6">
       <PageHeader
         title="Banner Management"
-        description={`${banners.length} homepage banners`}
+        description={
+          isLoading ? "Loading banners…" : `${banners.length} homepage banners`
+        }
         action={(
           <Button onClick={onUploadClick} size="sm">
             <ImagePlus className="mr-1 h-4 w-4" />
@@ -75,7 +123,12 @@ const BannerPage = () => {
         )}
       />
 
-      {banners.length === 0 ? (
+      {isLoading ? (
+        <div className="flex items-center justify-center gap-2 py-16 text-gray-400">
+          <Loader2 className="h-6 w-6 animate-spin" />
+          <span className="text-sm">Loading…</span>
+        </div>
+      ) : banners.length === 0 ? (
         <div className="rounded-xl border border-dashed border-white/20 bg-white/10 p-10 text-center text-sm text-gray-300 backdrop-blur-lg">
           No banners yet.
         </div>
@@ -103,7 +156,7 @@ const BannerPage = () => {
                 </div>
 
                 <div className="flex items-center gap-2">
-                  <Button type="button" size="sm" variant="outline" onClick={() => onToggleStatus(banner.id)}>
+                  <Button type="button" size="sm" variant="outline" onClick={() => void onToggleStatus(banner)}>
                     {banner.status === "Active" ? "Set Inactive" : "Set Active"}
                   </Button>
                   <Button type="button" size="sm" variant="outline" onClick={() => navigate(`/banners/edit/${banner.id}`)}>
@@ -115,7 +168,7 @@ const BannerPage = () => {
                     size="sm"
                     variant="outline"
                     className="text-red-300 hover:text-red-200"
-                    onClick={() => onDelete(banner.id)}
+                    onClick={() => void onDelete(banner.id)}
                   >
                     <Trash2 className="h-4 w-4" />
                     Delete
@@ -167,8 +220,15 @@ const BannerPage = () => {
               <Button type="button" variant="outline" onClick={() => setFormOpen(false)}>
                 Cancel
               </Button>
-              <Button type="button" onClick={onSave}>
-                Save Banner
+              <Button type="button" disabled={saving} onClick={() => void onSave()}>
+                {saving ? (
+                  <>
+                    <Loader2 className="mr-1 h-4 w-4 animate-spin" />
+                    Saving…
+                  </>
+                ) : (
+                  "Save Banner"
+                )}
               </Button>
             </div>
           </div>

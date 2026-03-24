@@ -1,19 +1,35 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { Loader2, Plus, Pencil, Trash2 } from "lucide-react";
 import PageHeader from "@/components/shared/PageHeader";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import DeleteModal from "@/components/shared/DeleteModal";
-import { Plus, Pencil, Trash2 } from "lucide-react";
-import { listTestimonials, removeTestimonial, Testimonial } from "@/lib/testimonial-store";
+import type { Testimonial } from "@/lib/testimonial-store";
+import { deleteTestimonialApi, getTestimonials } from "@/api/services/testimonial.service";
 
 const TestimonialsPage = () => {
   const navigate = useNavigate();
-  const [testimonials, setTestimonials] = useState<Testimonial[]>(() => listTestimonials());
+  const [testimonials, setTestimonials] = useState<Testimonial[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedCourse, setSelectedCourse] = useState<"All" | string>("All");
+
+  useEffect(() => {
+    const fetchList = async () => {
+      setIsLoading(true);
+      try {
+        setTestimonials(await getTestimonials());
+      } catch (e) {
+        console.error(e);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    void fetchList();
+  }, []);
 
   const courseOptions = useMemo(
     () => ["All", ...Array.from(new Set(testimonials.map((item) => item.course).filter(Boolean)))],
@@ -29,19 +45,24 @@ const TestimonialsPage = () => {
     [testimonials, searchTerm, selectedCourse],
   );
 
-  const handleDelete = () => {
-    if (deleteId) {
-      removeTestimonial(deleteId);
-      setTestimonials(listTestimonials());
-    }
+  const handleDelete = async () => {
+    if (!deleteId) return;
+    setTestimonials((prev) => prev.filter((t) => t.id !== deleteId));
     setDeleteId(null);
+    try {
+      await deleteTestimonialApi(deleteId);
+    } catch (e) {
+      console.error(e);
+    }
   };
 
   return (
     <div className="space-y-6">
       <PageHeader
         title="Testimonials Management"
-        description={`${testimonials.length} testimonials`}
+        description={
+          isLoading ? "Loading testimonials…" : `${testimonials.length} testimonials`
+        }
         action={(
           <Button onClick={() => navigate("/testimonials/add")} size="sm">
             <Plus className="mr-1 h-4 w-4" />
@@ -77,7 +98,12 @@ const TestimonialsPage = () => {
         </div>
       </div>
 
-      {filteredTestimonials.length === 0 ? (
+      {isLoading ? (
+        <div className="flex items-center justify-center gap-2 py-16 text-gray-400">
+          <Loader2 className="h-6 w-6 animate-spin" />
+          <span className="text-sm">Loading…</span>
+        </div>
+      ) : filteredTestimonials.length === 0 ? (
         <div className="rounded-xl border border-dashed border-white/20 bg-white/10 p-8 text-center text-sm text-gray-300 backdrop-blur-lg">
           No testimonials found
         </div>
@@ -100,10 +126,10 @@ const TestimonialsPage = () => {
               </div>
               <p className="text-sm leading-6 text-white/70">{item.message}</p>
               <div className="mt-3 flex justify-end gap-2">
-                <button onClick={() => navigate(`/testimonials/edit/${item.id}`)} className="rounded-lg p-2 text-blue-400 transition-all duration-200 hover:scale-[1.02] hover:bg-white/10">
+                <button type="button" onClick={() => navigate(`/testimonials/edit/${item.id}`)} className="rounded-lg p-2 text-blue-400 transition-all duration-200 hover:scale-[1.02] hover:bg-white/10">
                   <Pencil className="h-4 w-4" />
                 </button>
-                <button onClick={() => setDeleteId(item.id)} className="rounded-lg p-2 text-red-400 transition-all duration-200 hover:scale-[1.02] hover:bg-white/10">
+                <button type="button" onClick={() => setDeleteId(item.id)} className="rounded-lg p-2 text-red-400 transition-all duration-200 hover:scale-[1.02] hover:bg-white/10">
                   <Trash2 className="h-4 w-4" />
                 </button>
               </div>

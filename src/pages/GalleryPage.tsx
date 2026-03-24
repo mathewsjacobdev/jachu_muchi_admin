@@ -1,32 +1,25 @@
 import { useEffect, useMemo, useState } from "react";
+import { ImagePlus, Loader2, Trash2 } from "lucide-react";
 import PageHeader from "@/components/shared/PageHeader";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { ImagePlus, Trash2 } from "lucide-react";
-
-type GalleryCategory = "Campus" | "Labs" | "Events";
-
-interface GalleryItem {
-  id: string;
-  title: string;
-  category: GalleryCategory;
-  image: string;
-}
-
-const initialGallery: GalleryItem[] = [
-  { id: "1", title: "Main Building", category: "Campus", image: "https://images.unsplash.com/photo-1562774053-701939374585?w=600&h=400&fit=crop" },
-  { id: "2", title: "Computer Lab", category: "Labs", image: "https://images.unsplash.com/photo-1519389950473-47ba0277781c?w=600&h=400&fit=crop" },
-  { id: "3", title: "Annual Fest", category: "Events", image: "https://images.unsplash.com/photo-1492684223066-81342ee5ff30?w=600&h=400&fit=crop" },
-];
+import {
+  createGalleryItem,
+  deleteGalleryItemApi,
+  getGalleryItems,
+  type GalleryCategory,
+  type GalleryItem,
+} from "@/api/services/gallery.service";
 
 const categories: Array<"All" | GalleryCategory> = ["All", "Campus", "Labs", "Events"];
 const uploadCategories: GalleryCategory[] = ["Campus", "Labs", "Events"];
 
 const GalleryPage = () => {
-  const [items, setItems] = useState<GalleryItem[]>(initialGallery);
+  const [items, setItems] = useState<GalleryItem[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
   const [categoryFilter, setCategoryFilter] = useState<"All" | GalleryCategory>("All");
   const [formOpen, setFormOpen] = useState(false);
   const [form, setForm] = useState({
@@ -35,6 +28,22 @@ const GalleryPage = () => {
     imageFile: null as File | null,
   });
   const [previewImage, setPreviewImage] = useState("");
+  const [saving, setSaving] = useState(false);
+
+  const load = async () => {
+    setIsLoading(true);
+    try {
+      setItems(await getGalleryItems());
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    void load();
+  }, []);
 
   const filteredItems = useMemo(
     () => items.filter((item) => categoryFilter === "All" || item.category === categoryFilter),
@@ -72,25 +81,39 @@ const GalleryPage = () => {
     setPreviewImage(URL.createObjectURL(file));
   };
 
-  const handleSave = () => {
+  const handleSave = async () => {
     if (!form.title.trim() || !previewImage || !form.imageFile) return;
-    setItems((prev) => [
-      {
-        id: Date.now().toString(),
+    setSaving(true);
+    try {
+      const created = await createGalleryItem({
         title: form.title.trim(),
         category: form.category,
         image: previewImage,
-      },
-      ...prev,
-    ]);
-    setFormOpen(false);
+      });
+      setItems((prev) => [created, ...prev]);
+      setFormOpen(false);
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const removeItem = async (itemId: string) => {
+    setItems((prev) => prev.filter((x) => x.id !== itemId));
+    try {
+      await deleteGalleryItemApi(itemId);
+    } catch (e) {
+      console.error(e);
+      void load();
+    }
   };
 
   return (
     <div className="space-y-6">
       <PageHeader
         title="Gallery Management"
-        description={`${items.length} media items`}
+        description={isLoading ? "Loading…" : `${items.length} media items`}
         action={(
           <Button onClick={openUploadForm} size="sm">
             <ImagePlus className="mr-1 h-4 w-4" />
@@ -104,6 +127,7 @@ const GalleryPage = () => {
           {categories.map((category) => (
             <button
               key={category}
+              type="button"
               onClick={() => setCategoryFilter(category)}
               className={`rounded-full px-3 py-1.5 text-xs font-semibold transition-all duration-200 ${
                 categoryFilter === category ? "bg-slate-900 text-white" : "bg-slate-100 text-slate-700 hover:bg-slate-200"
@@ -115,29 +139,37 @@ const GalleryPage = () => {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
-        {filteredItems.map((item) => (
-          <div key={item.id} className="overflow-hidden rounded-xl border border-white/10 bg-white/5 text-white/80 shadow-lg backdrop-blur-xl transition-all duration-300 hover:scale-[1.02] hover:shadow-2xl">
-            <img src={item.image} alt={item.title} className="h-44 w-full object-cover" />
-            <div className="space-y-2 p-3 sm:p-4 md:p-5">
-              <div className="flex items-center justify-between">
-                <p className="text-sm font-semibold text-white/90">{item.title}</p>
-                <span className="rounded-full border border-blue-500/30 bg-blue-500/20 px-2.5 py-1 text-xs font-semibold text-blue-400">
-                  {item.category}
-                </span>
-              </div>
-              <div className="flex justify-end">
-                <button
-                  onClick={() => setItems((prev) => prev.filter((x) => x.id !== item.id))}
-                  className="rounded-lg p-2 text-red-400 transition-all duration-200 hover:scale-[1.02] hover:bg-white/10"
-                >
-                  <Trash2 className="h-4 w-4" />
-                </button>
+      {isLoading ? (
+        <div className="flex items-center justify-center gap-2 py-16 text-gray-400">
+          <Loader2 className="h-6 w-6 animate-spin" />
+          <span className="text-sm">Loading gallery…</span>
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
+          {filteredItems.map((item) => (
+            <div key={item.id} className="overflow-hidden rounded-xl border border-white/10 bg-white/5 text-white/80 shadow-lg backdrop-blur-xl transition-all duration-300 hover:scale-[1.02] hover:shadow-2xl">
+              <img src={item.image} alt={item.title} className="h-44 w-full object-cover" />
+              <div className="space-y-2 p-3 sm:p-4 md:p-5">
+                <div className="flex items-center justify-between">
+                  <p className="text-sm font-semibold text-white/90">{item.title}</p>
+                  <span className="rounded-full border border-blue-500/30 bg-blue-500/20 px-2.5 py-1 text-xs font-semibold text-blue-400">
+                    {item.category}
+                  </span>
+                </div>
+                <div className="flex justify-end">
+                  <button
+                    type="button"
+                    onClick={() => void removeItem(item.id)}
+                    className="rounded-lg p-2 text-red-400 transition-all duration-200 hover:scale-[1.02] hover:bg-white/10"
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </button>
+                </div>
               </div>
             </div>
-          </div>
-        ))}
-      </div>
+          ))}
+        </div>
+      )}
 
       <Dialog open={formOpen} onOpenChange={setFormOpen}>
         <DialogContent className="border-white/10 bg-white/10 backdrop-blur-lg sm:max-w-lg">
@@ -183,8 +215,8 @@ const GalleryPage = () => {
               <Button type="button" variant="outline" onClick={() => setFormOpen(false)}>
                 Cancel
               </Button>
-              <Button type="button" onClick={handleSave}>
-                Save
+              <Button type="button" disabled={saving} onClick={() => void handleSave()}>
+                {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : "Save"}
               </Button>
             </div>
           </div>

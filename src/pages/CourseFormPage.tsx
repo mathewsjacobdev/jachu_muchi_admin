@@ -1,6 +1,6 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
-import { ArrowLeft, Clock, X } from "lucide-react";
+import { ArrowLeft, Clock, Loader2, X } from "lucide-react";
 
 import PageHeader from "@/components/shared/PageHeader";
 import { Button } from "@/components/ui/button";
@@ -11,6 +11,7 @@ import {
   createCourse,
   getCourse,
   updateCourse,
+  type CoursePayload,
 } from "@/api/services/course.service";
 
 const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
@@ -42,34 +43,50 @@ const CourseFormPage = () => {
   const [previewUrl, setPreviewUrl] = useState("");
   const [isPreviewOpen, setIsPreviewOpen] = useState(false);
   const [imageError, setImageError] = useState("");
+  const [editLoading, setEditLoading] = useState(isEdit);
+  const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
-    if (isEdit && id) {
-      getCourse(id)
-        .then((data: any) => {
-          setForm({
-            courseName: data.title || "",
-            type: "Fellowship",
-            duration: "12 Months",
-            eligibility: "Demo",
-            keyDetails: data.body || "",
-          });
-        })
-        .catch((error) => {
-          console.error(error);
+    if (!isEdit || !id) return;
+
+    const controller = new AbortController();
+    let cancelled = false;
+
+    (async () => {
+      setEditLoading(true);
+      try {
+        const data = await getCourse(id, controller.signal);
+        if (cancelled) return;
+        setForm({
+          courseName: data.courseName,
+          type: data.type,
+          duration: data.duration,
+          eligibility: data.eligibility,
+          keyDetails: data.keyDetails,
         });
-    }
+        setPreviewUrl(data.imageUrl ?? "");
+        setImageFile(null);
+      } catch (e) {
+        if ((e as Error).name === "AbortError") return;
+        if (!cancelled) console.error(e);
+      } finally {
+        if (!cancelled) setEditLoading(false);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+      controller.abort();
+    };
   }, [id, isEdit]);
 
-  useEffect(() => {
-    return () => {
-      if (previewUrl.startsWith("blob:")) {
-        URL.revokeObjectURL(previewUrl);
-      }
-    };
+  useEffect(() => () => {
+    if (previewUrl.startsWith("blob:")) {
+      URL.revokeObjectURL(previewUrl);
+    }
   }, [previewUrl]);
 
-  const applyImageFile = (file: File | null) => {
+  const applyImageFile = useCallback((file: File | null) => {
     setImageError("");
     if (!file) {
       setImageFile(null);
@@ -83,7 +100,7 @@ const CourseFormPage = () => {
     }
     setImageFile(file);
     setPreviewUrl(URL.createObjectURL(file));
-  };
+  }, []);
 
   const handleImageChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     applyImageFile(event.target.files?.[0] ?? null);
@@ -98,32 +115,50 @@ const CourseFormPage = () => {
     event.preventDefault();
   };
 
-  const handleSave = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleSave = useCallback(
+    async (e: React.FormEvent) => {
+      e.preventDefault();
+      if (isEdit && !id) return;
 
-    const payload = {
-      title: form.courseName,
-      body: form.keyDetails,
-      duration: form.duration,
-      eligibility: form.eligibility,
-      type: form.type,
-      image: previewUrl,
-    };
+      const payload: CoursePayload = {
+        title: form.courseName,
+        body: form.keyDetails,
+        duration: form.duration,
+        eligibility: form.eligibility,
+        type: form.type,
+        image: previewUrl,
+      };
 
-    try {
-      if (isEdit && id) {
-        await updateCourse(id, payload);
-      } else {
-        await createCourse(payload);
+      setSubmitting(true);
+      try {
+        if (isEdit && id) {
+          await updateCourse(id, payload);
+        } else {
+          await createCourse(payload);
+        }
+        navigate("/products");
+      } catch (error) {
+        console.error(error);
+      } finally {
+        setSubmitting(false);
       }
+    },
+    [form.courseName, form.duration, form.eligibility, form.keyDetails, form.type, id, isEdit, navigate, previewUrl],
+  );
 
-      navigate("/courses");
-    } catch (error) {
-      console.error(error);
-    }
-  };
+  const durationLabel = useMemo(
+    () => form.duration.trim() || "Duration",
+    [form.duration],
+  );
 
-  const durationLabel = form.duration.trim() || "Duration";
+  if (isEdit && editLoading) {
+    return (
+      <div className="flex flex-col items-center justify-center gap-2 py-24 text-gray-400">
+        <Loader2 className="h-8 w-8 animate-spin" />
+        <p className="text-sm">Loading course…</p>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6 p-4 sm:p-6">
@@ -142,7 +177,6 @@ const CourseFormPage = () => {
       />
 
       <form onSubmit={handleSave} className="grid grid-cols-1 gap-6 lg:grid-cols-3">
-        {/* Left: form */}
         <div className="space-y-4 lg:col-span-2">
           <div className="space-y-5 rounded-xl border border-white/10 bg-gradient-to-br from-[#0f172a] to-[#1e293b] p-6 shadow-lg">
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
@@ -211,8 +245,8 @@ const CourseFormPage = () => {
                   Click or Drag & Drop to Upload Image
                 </p>
                 <p className="mt-1 text-xs text-gray-500">PNG, JPG up to 5MB</p>
-                {imageError && <p className="mt-2 text-xs text-red-300">{imageError}</p>}
-                {imageFile && <p className="mt-2 text-xs text-gray-400">{imageFile.name}</p>}
+                {imageError ? <p className="mt-2 text-xs text-red-300">{imageError}</p> : null}
+                {imageFile ? <p className="mt-2 text-xs text-gray-400">{imageFile.name}</p> : null}
               </label>
               <input
                 id="course-image-upload"
@@ -221,7 +255,7 @@ const CourseFormPage = () => {
                 onChange={handleImageChange}
                 className="hidden"
               />
-              {previewUrl && (
+              {previewUrl ? (
                 <button
                   type="button"
                   onClick={() => setIsPreviewOpen(true)}
@@ -233,15 +267,17 @@ const CourseFormPage = () => {
                     className="max-h-36 w-full cursor-zoom-in object-cover"
                   />
                 </button>
-              )}
+              ) : null}
             </div>
           </div>
 
           <div className="flex flex-wrap items-center gap-3">
             <Button
               type="submit"
+              disabled={submitting}
               className="bg-blue-600 text-white shadow-md transition-all duration-200 hover:scale-[1.02] hover:bg-blue-700 hover:shadow-xl"
             >
+              {submitting ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
               {isEdit ? "Save Changes" : "Save Course"}
             </Button>
             <Button type="button" variant="outline" onClick={() => navigate("/products")}>
@@ -250,7 +286,6 @@ const CourseFormPage = () => {
           </div>
         </div>
 
-        {/* Right: live preview */}
         <aside className="lg:col-span-1">
           <div className="sticky top-4 space-y-3 rounded-xl border border-white/20 bg-white/10 p-4 backdrop-blur-lg">
             <p className="text-xs font-semibold uppercase tracking-wider text-gray-400">
@@ -265,7 +300,9 @@ const CourseFormPage = () => {
                 >
                   <img
                     src={previewUrl}
-                    alt="Course"
+                    alt=""
+                    loading="lazy"
+                    decoding="async"
                     className="h-40 w-full cursor-zoom-in object-cover"
                   />
                 </button>
@@ -294,10 +331,11 @@ const CourseFormPage = () => {
         </aside>
       </form>
 
-      {isPreviewOpen && previewUrl && (
+      {isPreviewOpen && previewUrl ? (
         <div
           className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4"
           onClick={() => setIsPreviewOpen(false)}
+          role="presentation"
         >
           <button
             type="button"
@@ -309,12 +347,12 @@ const CourseFormPage = () => {
           </button>
           <img
             src={previewUrl}
-            alt="Course preview large"
+            alt=""
             className="max-h-[80vh] max-w-[90vw] rounded-xl object-contain shadow-2xl transition-all duration-200"
             onClick={(e) => e.stopPropagation()}
           />
         </div>
-      )}
+      ) : null}
     </div>
   );
 };

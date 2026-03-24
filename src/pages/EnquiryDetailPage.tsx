@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { ArrowLeft, Loader2, Save } from "lucide-react";
 import { Link, useParams } from "react-router-dom";
 import PageHeader from "@/components/shared/PageHeader";
@@ -27,6 +27,8 @@ const statusClasses: Record<EnquiryStatus, string> = {
   Closed: "bg-red-100 text-red-700 ring-red-200/80",
 };
 
+const SAVED_TOAST_MS = 1500;
+
 const EnquiryDetailPage = () => {
   const { id } = useParams();
   const enquiryId = Number(id);
@@ -38,6 +40,11 @@ const EnquiryDetailPage = () => {
   const [saved, setSaved] = useState(false);
   const [saving, setSaving] = useState(false);
   const [statusBusy, setStatusBusy] = useState(false);
+  const savedTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => () => {
+    if (savedTimerRef.current) clearTimeout(savedTimerRef.current);
+  }, []);
 
   useEffect(() => {
     if (!Number.isFinite(enquiryId) || enquiryId < 1) {
@@ -46,10 +53,11 @@ const EnquiryDetailPage = () => {
       return;
     }
 
+    const controller = new AbortController();
     let cancelled = false;
     setLoading(true);
 
-    getEnquiryById(enquiryId)
+    getEnquiryById(enquiryId, controller.signal)
       .then((data) => {
         if (cancelled) return;
         if (!data) {
@@ -61,6 +69,7 @@ const EnquiryDetailPage = () => {
         setNotes(data.notes ?? "");
       })
       .catch((err) => {
+        if ((err as Error).name === "AbortError") return;
         console.error(err);
         if (!cancelled) setEnquiry(null);
       })
@@ -70,10 +79,11 @@ const EnquiryDetailPage = () => {
 
     return () => {
       cancelled = true;
+      controller.abort();
     };
   }, [enquiryId]);
 
-  const handleStatusChange = async (value: EnquiryStatus) => {
+  const handleStatusChange = useCallback(async (value: EnquiryStatus) => {
     if (!enquiry) return;
     setStatus(value);
     setStatusBusy(true);
@@ -82,36 +92,41 @@ const EnquiryDetailPage = () => {
       setEnquiry((prev) => (prev ? { ...prev, status: value } : prev));
     } catch (err) {
       console.error(err);
-      const fresh = await getEnquiryById(enquiry.id);
-      if (fresh) {
-        setEnquiry(fresh);
-        setStatus(fresh.status);
+      try {
+        const fresh = await getEnquiryById(enquiry.id);
+        if (fresh) {
+          setEnquiry(fresh);
+          setStatus(fresh.status);
+        }
+      } catch (refetchErr) {
+        console.error(refetchErr);
       }
     } finally {
       setStatusBusy(false);
     }
-  };
+  }, [enquiry]);
 
-  const handleSave = async () => {
+  const handleSave = useCallback(async () => {
     if (!enquiry) return;
     setSaving(true);
     try {
       await updateEnquiryNotes(enquiry.id, notes);
       setEnquiry((prev) => (prev ? { ...prev, notes } : prev));
       setSaved(true);
-      setTimeout(() => setSaved(false), 1500);
+      if (savedTimerRef.current) clearTimeout(savedTimerRef.current);
+      savedTimerRef.current = setTimeout(() => setSaved(false), SAVED_TOAST_MS);
     } catch (err) {
       console.error(err);
     } finally {
       setSaving(false);
     }
-  };
+  }, [enquiry, notes]);
 
   if (loading) {
     return (
       <div className="flex items-center justify-center gap-2 p-6 text-white">
-        <Loader2 className="h-4 w-4 animate-spin" />
-        Loading...
+        <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
+        Loading…
       </div>
     );
   }
@@ -202,7 +217,7 @@ const EnquiryDetailPage = () => {
               <Select
                 value={status}
                 disabled={statusBusy}
-                onValueChange={(v) => handleStatusChange(v as EnquiryStatus)}
+                onValueChange={(v) => void handleStatusChange(v as EnquiryStatus)}
               >
                 <SelectTrigger className="h-10 w-[170px] rounded-lg border border-white/20 bg-white/10 text-white backdrop-blur-lg hover:bg-white/10 data-[placeholder]:text-gray-300">
                   <SelectValue />
@@ -247,13 +262,13 @@ const EnquiryDetailPage = () => {
           <button
             type="button"
             disabled={saving}
-            onClick={handleSave}
+            onClick={() => void handleSave()}
             className="inline-flex w-full items-center justify-center gap-2 rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white shadow-[0_0_20px_rgba(59,130,246,0.35)] transition-all duration-200 hover:scale-[1.02] hover:shadow-xl hover:bg-blue-700 disabled:opacity-60 sm:w-auto"
           >
             {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
             Save
           </button>
-          {saved && <p className="text-xs font-medium text-green-400">Saved.</p>}
+          {saved ? <p className="text-xs font-medium text-green-400">Saved.</p> : null}
         </div>
       </div>
     </div>

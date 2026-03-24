@@ -1,6 +1,6 @@
-import { MessageSquareText, Sparkles, BadgeCheck, CircleX, Eye, Trash2 } from "lucide-react";
+import { MessageSquareText, Sparkles, BadgeCheck, CircleX, Eye, Loader2, Trash2 } from "lucide-react";
 import { motion } from "framer-motion";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import {
   Bar,
@@ -14,68 +14,12 @@ import {
   YAxis,
 } from "recharts";
 import PageHeader from "@/components/shared/PageHeader";
-
-type EnquiryStatus = "New" | "Contacted" | "Interested" | "Converted" | "Closed";
-
-interface Enquiry {
-  id: number;
-  name: string;
-  phone: string;
-  course: string;
-  date: string;
-  status: EnquiryStatus;
-}
-
-const initialEnquiries: Enquiry[] = [
-  {
-    id: 1,
-    name: "Aarav Sharma",
-    phone: "+91 98123 45678",
-    course: "Premium Vision Plan",
-    date: "19 Mar 2026",
-    status: "New",
-  },
-  {
-    id: 2,
-    name: "Priya Nair",
-    phone: "+91 99221 88441",
-    course: "Contact Lens Subscription",
-    date: "18 Mar 2026",
-    status: "Contacted",
-  },
-  {
-    id: 3,
-    name: "Rahul Verma",
-    phone: "+91 98700 10022",
-    course: "Blue Light Protection Package",
-    date: "17 Mar 2026",
-    status: "Interested",
-  },
-  {
-    id: 4,
-    name: "Neha Kapoor",
-    phone: "+91 99887 55443",
-    course: "Progressive Lens Upgrade",
-    date: "16 Mar 2026",
-    status: "Converted",
-  },
-  {
-    id: 5,
-    name: "Vikram Singh",
-    phone: "+91 98989 70707",
-    course: "Eyeglass Repair Service",
-    date: "15 Mar 2026",
-    status: "Closed",
-  },
-  {
-    id: 6,
-    name: "Ananya Iyer",
-    phone: "+91 98321 66554",
-    course: "Computer Glasses Package",
-    date: "14 Mar 2026",
-    status: "New",
-  },
-];
+import {
+  deleteEnquiry,
+  getEnquiries,
+  type Enquiry,
+  type EnquiryStatus,
+} from "@/api/services/enquiry.service";
 
 const statusClasses: Record<EnquiryStatus, string> = {
   New: "border border-blue-400/20 bg-blue-400/10 text-blue-300",
@@ -96,8 +40,23 @@ const parseEnquiryDate = (value: string) => {
 
 const DashboardPage = () => {
   const navigate = useNavigate();
-  const [enquiries, setEnquiries] = useState<Enquiry[]>(initialEnquiries);
+  const [enquiries, setEnquiries] = useState<Enquiry[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
   const [timeFilter, setTimeFilter] = useState<TimeFilter>("This Week");
+
+  useEffect(() => {
+    const load = async () => {
+      setIsLoading(true);
+      try {
+        setEnquiries(await getEnquiries());
+      } catch (e) {
+        console.error(e);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    void load();
+  }, []);
 
   const referenceDate = useMemo(() => {
     const dates = enquiries
@@ -186,17 +145,33 @@ const DashboardPage = () => {
 
   const recentEnquiries = useMemo(() => filteredEnquiries.slice(0, 5), [filteredEnquiries]);
 
-  const handleDelete = (id: number) => {
+  const handleDelete = async (id: number) => {
     setEnquiries((prev) => prev.filter((enquiry) => enquiry.id !== id));
+    try {
+      await deleteEnquiry(id);
+    } catch (e) {
+      console.error(e);
+    }
   };
 
   return (
     <div className="space-y-6">
     <PageHeader
       title="Dashboard"
-      description="Quick snapshot of enquiry performance and latest leads."
+      description={
+        isLoading
+          ? "Loading enquiries…"
+          : "Quick snapshot of enquiry performance and latest leads."
+      }
     />
 
+    {isLoading ? (
+      <div className="flex items-center justify-center gap-2 py-16 text-gray-400">
+        <Loader2 className="h-6 w-6 animate-spin" />
+        <span className="text-sm">Loading dashboard…</span>
+      </div>
+    ) : (
+      <>
     <div className="rounded-xl border border-white/20 bg-white/10 p-2 shadow-md backdrop-blur-lg">
       <div className="flex flex-wrap items-center gap-2">
         {(["Today", "This Week", "This Month"] as TimeFilter[]).map((tab) => (
@@ -408,6 +383,8 @@ const DashboardPage = () => {
         ))}
       </div>
     </div>
+      </>
+    )}
     </div>
   );
 };

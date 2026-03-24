@@ -1,13 +1,15 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import DeleteModal from "@/components/shared/DeleteModal";
 import PageHeader from "@/components/shared/PageHeader";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Plus, Pencil, Trash2, Calendar, Search, Newspaper, Image as ImageIcon } from "lucide-react";
-import { NewsStatus, listNews, removeNews } from "@/lib/news-store";
+import { Plus, Pencil, Trash2, Calendar, Search, Newspaper, Image as ImageIcon, Loader2 } from "lucide-react";
+import { deleteNews, getNews } from "@/api/services/news.service";
+import type { NewsItem } from "@/types";
 
+type NewsStatus = NewsItem["status"];
 type StatusFilter = "All" | NewsStatus;
 
 const statusClasses: Record<NewsStatus, string> = {
@@ -17,10 +19,26 @@ const statusClasses: Record<NewsStatus, string> = {
 
 const NewsPage = () => {
   const navigate = useNavigate();
-  const [news, setNews] = useState(() => listNews());
+  const [news, setNews] = useState<NewsItem[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("All");
+
+  useEffect(() => {
+    const load = async () => {
+      setIsLoading(true);
+      try {
+        const data = await getNews();
+        setNews(data);
+      } catch (err) {
+        console.error(err);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    load();
+  }, []);
 
   const filteredNews = useMemo(() => {
     const query = search.trim().toLowerCase();
@@ -30,17 +48,24 @@ const NewsPage = () => {
       return matchesQuery && matchesStatus;
     });
   }, [news, search, statusFilter]);
+
   const publishedCount = useMemo(
     () => news.filter((item) => item.status === "Published").length,
     [news],
   );
 
-  const handleDelete = () => {
-    if (deleteId) {
-      removeNews(deleteId);
-      setNews(listNews());
-    }
+  const handleDeleteConfirm = async () => {
+    if (!deleteId) return;
+    const id = deleteId;
     setDeleteId(null);
+    try {
+      await deleteNews(id);
+      setNews((prev) => prev.filter((item) => item.id !== id));
+    } catch (err) {
+      console.error(err);
+      const data = await getNews();
+      setNews(data);
+    }
   };
 
   return (
@@ -101,7 +126,12 @@ const NewsPage = () => {
         </div>
       </div>
 
-      {filteredNews.length === 0 ? (
+      {isLoading ? (
+        <div className="flex items-center justify-center gap-2 py-16 text-sm text-gray-300">
+          <Loader2 className="h-5 w-5 animate-spin" />
+          Loading articles...
+        </div>
+      ) : filteredNews.length === 0 ? (
         <div className="rounded-xl border border-dashed border-white/20 bg-white/10 p-12 text-center shadow-md backdrop-blur-lg transition-all duration-300 hover:scale-[1.02] hover:shadow-2xl">
           <div className="mx-auto mb-3 flex h-11 w-11 items-center justify-center rounded-full bg-white/10 text-gray-200">
             <Newspaper className="h-5 w-5" />
@@ -150,6 +180,7 @@ const NewsPage = () => {
                     View
                   </Button>
                   <button
+                    type="button"
                     onClick={() => navigate(`/news/edit/${n.id}`)}
                     className="inline-flex h-9 w-9 items-center justify-center rounded-lg bg-white/10 text-blue-300 shadow-sm transition-all duration-200 hover:scale-[1.02] hover:shadow-xl hover:bg-white/20"
                     aria-label={`Edit ${n.title}`}
@@ -157,6 +188,7 @@ const NewsPage = () => {
                     <Pencil className="h-4 w-4" />
                   </button>
                   <button
+                    type="button"
                     onClick={() => setDeleteId(n.id)}
                     className="inline-flex h-9 w-9 items-center justify-center rounded-lg bg-white/10 text-red-300 shadow-sm transition-all duration-200 hover:scale-[1.02] hover:shadow-xl hover:bg-white/20"
                     aria-label={`Delete ${n.title}`}
@@ -170,7 +202,12 @@ const NewsPage = () => {
         </div>
       )}
 
-      <DeleteModal open={!!deleteId} onOpenChange={() => setDeleteId(null)} onConfirm={handleDelete} title="Delete article" />
+      <DeleteModal
+        open={!!deleteId}
+        onOpenChange={() => setDeleteId(null)}
+        onConfirm={handleDeleteConfirm}
+        title="Delete article"
+      />
     </div>
   );
 };

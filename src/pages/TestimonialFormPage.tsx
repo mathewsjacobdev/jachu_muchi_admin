@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useState } from "react";
-import { ArrowLeft, ImagePlus } from "lucide-react";
+import { useEffect, useState } from "react";
+import { ArrowLeft, ImagePlus, Loader2 } from "lucide-react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 
 import PageHeader from "@/components/shared/PageHeader";
@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { getTestimonialById, upsertTestimonial } from "@/lib/testimonial-store";
+import { createTestimonial, getTestimonialByIdApi, updateTestimonialApi } from "@/api/services/testimonial.service";
 
 const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
 
@@ -29,22 +29,39 @@ const TestimonialFormPage = () => {
   const { id } = useParams();
   const navigate = useNavigate();
   const isEdit = Boolean(id);
-  const existing = useMemo(() => (id ? getTestimonialById(id) : undefined), [id]);
 
   const [form, setForm] = useState(emptyForm);
   const [previewUrl, setPreviewUrl] = useState("");
   const [imageFile, setImageFile] = useState<File | null>(null);
   const [imageError, setImageError] = useState("");
+  const [editLoading, setEditLoading] = useState(isEdit);
+  const [loadError, setLoadError] = useState("");
+  const [saving, setSaving] = useState(false);
 
   useEffect(() => {
-    if (!isEdit) return;
-    if (!existing) {
-      navigate("/testimonials");
-      return;
-    }
-    setForm({ name: existing.name, course: existing.course, message: existing.message });
-    setPreviewUrl(existing.image);
-  }, [existing, isEdit, navigate]);
+    if (!isEdit || !id) return;
+
+    const load = async () => {
+      setEditLoading(true);
+      setLoadError("");
+      try {
+        const existing = await getTestimonialByIdApi(id);
+        if (!existing) {
+          navigate("/testimonials");
+          return;
+        }
+        setForm({ name: existing.name, course: existing.course, message: existing.message });
+        setPreviewUrl(existing.image);
+      } catch (e) {
+        console.error(e);
+        setLoadError("Could not load testimonial.");
+      } finally {
+        setEditLoading(false);
+      }
+    };
+
+    void load();
+  }, [id, isEdit, navigate]);
 
   const onImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0] ?? null;
@@ -64,15 +81,50 @@ const TestimonialFormPage = () => {
     e.preventDefault();
     if (!form.name.trim() || !form.message.trim()) return;
     const image = imageFile ? await fileToDataUrl(imageFile) : previewUrl.trim();
-    upsertTestimonial({
-      id,
-      name: form.name.trim(),
-      course: form.course.trim(),
-      message: form.message.trim(),
-      image,
-    });
-    navigate("/testimonials");
+    setSaving(true);
+    try {
+      if (isEdit && id) {
+        await updateTestimonialApi(id, {
+          name: form.name.trim(),
+          course: form.course.trim(),
+          message: form.message.trim(),
+          image,
+        });
+      } else {
+        await createTestimonial({
+          name: form.name.trim(),
+          course: form.course.trim(),
+          message: form.message.trim(),
+          image,
+        });
+      }
+      navigate("/testimonials");
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setSaving(false);
+    }
   };
+
+  if (isEdit && editLoading) {
+    return (
+      <div className="flex flex-col items-center justify-center gap-2 py-24 text-gray-400">
+        <Loader2 className="h-8 w-8 animate-spin" />
+        <p className="text-sm">Loading…</p>
+      </div>
+    );
+  }
+
+  if (loadError) {
+    return (
+      <div className="space-y-4 p-4 sm:p-6">
+        <p className="text-sm text-red-400">{loadError}</p>
+        <Button type="button" variant="outline" onClick={() => navigate("/testimonials")}>
+          Back
+        </Button>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6 p-4 sm:p-6">
@@ -90,7 +142,7 @@ const TestimonialFormPage = () => {
         )}
       />
 
-      <form onSubmit={onSave} className="grid grid-cols-1 gap-6 lg:grid-cols-3">
+      <form onSubmit={(e) => void onSave(e)} className="grid grid-cols-1 gap-6 lg:grid-cols-3">
         <div className="space-y-4 lg:col-span-2">
           <div className="space-y-5 rounded-xl border border-white/10 bg-white/5 p-6">
             <h2 className="text-base font-semibold text-gray-100">Testimonial Details</h2>
@@ -124,7 +176,10 @@ const TestimonialFormPage = () => {
             </div>
 
             <div className="flex gap-2">
-              <Button type="submit">{isEdit ? "Save Changes" : "Save Testimonial"}</Button>
+              <Button type="submit" disabled={saving}>
+                {saving ? <Loader2 className="mr-1 h-4 w-4 animate-spin" /> : null}
+                {isEdit ? "Save Changes" : "Save Testimonial"}
+              </Button>
               <Button type="button" variant="outline" onClick={() => navigate("/testimonials")}>
                 Cancel
               </Button>

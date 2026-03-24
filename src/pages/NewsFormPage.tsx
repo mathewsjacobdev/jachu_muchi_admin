@@ -1,6 +1,6 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
-import { ArrowLeft, Image as ImageIcon, X } from "lucide-react";
+import { ArrowLeft, Image as ImageIcon, Loader2, X } from "lucide-react";
 
 import PageHeader from "@/components/shared/PageHeader";
 import { Button } from "@/components/ui/button";
@@ -8,7 +8,10 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
-import { getNewsById, NewsStatus, upsertNews } from "@/lib/news-store";
+import { createNews, getNewsById, updateNews } from "@/api/services/news.service";
+import type { NewsItem } from "@/types";
+
+type NewsStatus = NewsItem["status"];
 
 const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
 
@@ -32,34 +35,52 @@ const NewsFormPage = () => {
   const navigate = useNavigate();
   const isEdit = Boolean(id);
 
-  const existing = useMemo(() => (id ? getNewsById(id) : undefined), [id]);
   const [form, setForm] = useState({
     ...emptyForm,
     date: new Date().toISOString().split("T")[0],
   });
   const [imageFile, setImageFile] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState("");
+  const [editLoading, setEditLoading] = useState(false);
 
   useEffect(() => {
-    if (!isEdit) return;
-    if (!existing) {
-      navigate("/news");
-      return;
-    }
-    setForm({
-      title: existing.title,
-      description: existing.description,
-      date: existing.date,
-      status: existing.status,
-    });
-    setPreviewUrl(existing.image);
-  }, [existing, isEdit, navigate]);
+    if (!isEdit || !id) return;
 
-  useEffect(() => () => {
-    if (previewUrl.startsWith("blob:")) {
-      URL.revokeObjectURL(previewUrl);
-    }
-  }, [previewUrl]);
+    let cancelled = false;
+    setEditLoading(true);
+
+    getNewsById(id)
+      .then((article) => {
+        if (cancelled) return;
+        if (!article) {
+          navigate("/news");
+          return;
+        }
+        setForm({
+          title: article.title,
+          description: article.description,
+          date: article.date,
+          status: article.status,
+        });
+        setPreviewUrl(article.image);
+      })
+      .finally(() => {
+        if (!cancelled) setEditLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [id, isEdit, navigate]);
+
+  useEffect(
+    () => () => {
+      if (previewUrl.startsWith("blob:")) {
+        URL.revokeObjectURL(previewUrl);
+      }
+    },
+    [previewUrl],
+  );
 
   const onImageChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0] ?? null;
@@ -88,17 +109,38 @@ const NewsFormPage = () => {
 
     const image = imageFile ? await fileToDataUrl(imageFile) : previewUrl.trim();
 
-    upsertNews({
-      id,
-      title: form.title.trim(),
-      description: form.description.trim(),
-      date: form.date,
-      status: form.status,
-      image,
-    });
-
-    navigate("/news");
+    try {
+      if (isEdit && id) {
+        await updateNews(id, {
+          title: form.title.trim(),
+          description: form.description.trim(),
+          date: form.date,
+          status: form.status,
+          image,
+        });
+      } else {
+        await createNews({
+          title: form.title.trim(),
+          description: form.description.trim(),
+          date: form.date,
+          status: form.status,
+          image,
+        });
+      }
+      navigate("/news");
+    } catch (err) {
+      console.error(err);
+    }
   };
+
+  if (isEdit && editLoading) {
+    return (
+      <div className="flex items-center justify-center gap-2 p-10 text-gray-300">
+        <Loader2 className="h-5 w-5 animate-spin" />
+        Loading article...
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6 p-4 sm:p-6">
