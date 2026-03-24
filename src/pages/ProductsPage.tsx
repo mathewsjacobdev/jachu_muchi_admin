@@ -1,41 +1,88 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import PageHeader from "@/components/shared/PageHeader";
 import DeleteModal from "@/components/shared/DeleteModal";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Plus, Search, Pencil, Trash2 } from "lucide-react";
-import { Course, CourseStatus, listCourses, removeCourse, setCourseStatus } from "@/lib/course-store";
+import { deleteCourse, getCourses } from "@/api/services/course.service";
+
+type CourseListItem = {
+  id: number;
+  courseName: string;
+  type: string;
+  duration: string;
+  eligibility: string;
+  keyDetails: string;
+  image: string;
+};
 
 const ProductsPage = () => {
   const navigate = useNavigate();
-  const [courses, setCourses] = useState<Course[]>(() => listCourses());
+  const [courses, setCourses] = useState<CourseListItem[]>([]);
+  const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
-  const [deleteId, setDeleteId] = useState<string | null>(null);
+  const [deleteId, setDeleteId] = useState<number | null>(null);
 
-  const filtered = useMemo(() => courses.filter((p) =>
-    p.title.toLowerCase().includes(search.toLowerCase()) ||
-    p.description.toLowerCase().includes(search.toLowerCase()) ||
-    p.duration.toLowerCase().includes(search.toLowerCase())
-  ), [courses, search]
+  useEffect(() => {
+    const fetchCourses = async () => {
+      try {
+        const data = await getCourses();
+
+        const mapped = data.map((item: any) => ({
+          id: item.id,
+          courseName: item.title,
+          keyDetails: item.body,
+          type: "Demo Type",
+          duration: "12 Months",
+          eligibility: "Plus Two",
+          image: "https://images.unsplash.com/photo-1581093458791-9d2c6c3f0c0f?w=600",
+        }));
+
+        setCourses(mapped);
+      } catch (error) {
+        console.error(error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchCourses();
+  }, []);
+
+  const filtered = useMemo(
+    () =>
+      courses.filter((course) => {
+        const mappedCourseName = course.courseName ?? "";
+        const mappedKeyDetails = course.keyDetails ?? "";
+        const mappedType = course.type ?? "";
+        const mappedDuration = course.duration ?? "";
+        const query = search.toLowerCase();
+
+        return (
+          mappedCourseName.toLowerCase().includes(query) ||
+          mappedKeyDetails.toLowerCase().includes(query) ||
+          mappedType.toLowerCase().includes(query) ||
+          mappedDuration.toLowerCase().includes(query)
+        );
+      }),
+    [courses, search],
   );
 
-  const handleDelete = () => {
-    if (deleteId) {
-      removeCourse(deleteId);
-      setCourses(listCourses());
+  const handleDelete = async () => {
+    if (!deleteId) return;
+    try {
+      await deleteCourse(String(deleteId));
+      setCourses((prev) => prev.filter((course) => course.id !== deleteId));
+      setDeleteId(null);
+    } catch (error) {
+      console.error(error);
     }
-    setDeleteId(null);
   };
 
-  const updateStatus = (id: string, status: CourseStatus) => {
-    setCourseStatus(id, status);
-    setCourses(listCourses());
-  };
-
-  const toggleStatus = (id: string, current: CourseStatus) => {
-    updateStatus(id, current === "Active" ? "Inactive" : "Active");
-  };
+  if (loading) {
+    return <div className="p-6">Loading courses...</div>;
+  }
 
   return (
     <div className="space-y-6">
@@ -63,78 +110,81 @@ const ProductsPage = () => {
         </div>
       ) : (
         <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
-          {filtered.map((p) => (
+          {filtered.map((course) => {
+            const mappedCourseName = course.courseName || "Untitled course";
+            const mappedType = course.type || "General";
+            const mappedKeyDetails = course.keyDetails || "";
+            const mappedDuration = course.duration ?? "N/A";
+            const mappedEligibility = course.eligibility?.trim() ? course.eligibility : "N/A";
+
+            return (
             <div
-              key={p.id}
-              className="group overflow-hidden rounded-xl border border-white/10 bg-gradient-to-br from-[#0f172a] to-[#1e293b] shadow-lg transition-all duration-300 hover:-translate-y-1 hover:scale-[1.02] hover:shadow-2xl"
+              key={course.id}
+              className="overflow-hidden rounded-2xl border border-white/10 bg-slate-900/60 shadow-lg transition-all duration-300 hover:shadow-2xl"
             >
-              <div className="relative h-44 w-full overflow-hidden rounded-t-xl">
-                {p.image ? (
-                  <img src={p.image} alt={p.title} className="h-44 w-full object-cover" />
-                ) : (
-                  <div className="flex h-44 w-full items-center justify-center bg-white/[0.06] text-xs font-medium text-gray-500">
-                    No Image
-                  </div>
-                )}
-                <div className="pointer-events-none absolute inset-0 rounded-t-xl bg-gradient-to-t from-black/40 to-transparent" />
+              <div className="h-44 w-full overflow-hidden bg-slate-800">
+                <img
+                  src={course.image || "https://via.placeholder.com/400x200?text=Course"}
+                  alt={course.courseName}
+                  className="h-44 w-full object-cover"
+                  onError={(e) => {
+                    e.currentTarget.src = "https://via.placeholder.com/400x200?text=Course";
+                  }}
+                />
               </div>
 
               <div className="space-y-3 p-4">
-                <h3 className="text-lg font-semibold leading-snug text-white">{p.title}</h3>
-                <p className="line-clamp-2 text-sm text-gray-400">{p.description}</p>
+                <h3 className="text-lg font-semibold text-white">{mappedCourseName}</h3>
 
-                <div className="flex flex-wrap items-baseline gap-x-4 gap-y-1 text-xs text-gray-400">
-                  <span>
-                    <span className="text-gray-500">Duration</span> · {p.duration}
-                  </span>
-                  <span>
-                    <span className="text-gray-500">Eligibility</span> ·{" "}
-                    {p.eligibility?.trim() ? p.eligibility : "—"}
-                  </span>
+                <span className="inline-block rounded-full bg-blue-500/20 px-2 py-1 text-xs text-blue-300">
+                  {mappedType}
+                </span>
+
+                <div className="space-y-1 text-sm text-gray-400">
+                  <p>Duration: {mappedDuration}</p>
+                  <p>Eligibility: {mappedEligibility}</p>
                 </div>
 
-                <div className="flex flex-wrap items-center justify-between gap-3 pt-1">
+                <p className="line-clamp-2 text-sm text-gray-300">
+                  {mappedKeyDetails || "No key details available."}
+                </p>
+
+                <div className="flex gap-2 pt-2">
                   <button
                     type="button"
-                    title="Click to toggle Active / Inactive"
-                    onClick={() => toggleStatus(p.id, p.status)}
-                    className={`inline-flex shrink-0 rounded-full border px-3 py-1 text-xs font-semibold transition-all duration-200 ${
-                      p.status === "Active"
-                        ? "border-emerald-500/40 bg-emerald-500/15 text-emerald-300 hover:bg-emerald-500/25"
-                        : "border-red-500/40 bg-red-500/15 text-red-300 hover:bg-red-500/25"
-                    }`}
+                    onClick={() => navigate(`/courses/edit/${course.id}`)}
+                    className="inline-flex items-center gap-1.5 rounded-md bg-blue-600 px-3 py-2 text-xs font-medium text-white transition-colors hover:bg-blue-700"
+                    aria-label={`Edit ${mappedCourseName}`}
                   >
-                    {p.status}
+                    <Pencil className="h-3.5 w-3.5" />
+                    Edit
                   </button>
-
-                  <div className="flex gap-2">
-                    <button
-                      type="button"
-                      onClick={() => navigate(`/courses/edit/${p.id}`)}
-                      className="inline-flex items-center gap-1.5 rounded-lg bg-white/10 px-2 py-1 text-xs font-medium text-blue-300 transition-all duration-200 hover:bg-white/20"
-                      aria-label={`Edit ${p.title}`}
-                    >
-                      <Pencil className="h-3.5 w-3.5" />
-                      Edit
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setDeleteId(p.id)}
-                      className="inline-flex items-center gap-1.5 rounded-lg bg-white/10 px-2 py-1 text-xs font-medium text-red-300 transition-all duration-200 hover:bg-white/20"
-                      aria-label={`Delete ${p.title}`}
-                    >
-                      <Trash2 className="h-3.5 w-3.5" />
-                      Delete
-                    </button>
-                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setDeleteId(course.id)}
+                    className="inline-flex items-center gap-1.5 rounded-md bg-red-600 px-3 py-2 text-xs font-medium text-white transition-colors hover:bg-red-700"
+                    aria-label={`Delete ${mappedCourseName}`}
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                    Delete
+                  </button>
                 </div>
               </div>
             </div>
-          ))}
+            );
+          })}
         </div>
       )}
 
-      <DeleteModal open={!!deleteId} onOpenChange={() => setDeleteId(null)} onConfirm={handleDelete} title="Delete course" description="This course will be permanently removed." />
+      <DeleteModal
+        open={!!deleteId}
+        onOpenChange={(open) => {
+          if (!open) setDeleteId(null);
+        }}
+        onConfirm={handleDelete}
+        title="Delete course"
+        description="This course will be permanently removed."
+      />
     </div>
   );
 };
