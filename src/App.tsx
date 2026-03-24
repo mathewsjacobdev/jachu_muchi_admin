@@ -18,8 +18,6 @@ import NewsPage from "@/pages/NewsPage";
 import NewsFormPage from "@/pages/NewsFormPage";
 import NewsDetailPage from "@/pages/NewsDetailPage";
 import EnquiriesPage from "@/pages/EnquiriesPage";
-import CourseEnquiriesPage from "@/pages/CourseEnquiriesPage";
-import CourseEnquiryDetailPage from "@/pages/CourseEnquiryDetailPage";
 import EnquiryDetailPage from "@/pages/EnquiryDetailPage";
 import BranchesPage from "@/pages/BranchesPage";
 import BranchFormPage from "@/pages/BranchFormPage";
@@ -58,8 +56,6 @@ const App = () => (
               <Route path="news/edit/:id" element={<NewsFormPage />} />
               <Route path="news/:id" element={<NewsDetailPage />} />
               <Route path="enquiries" element={<EnquiriesPage />} />
-              <Route path="course-enquiries" element={<CourseEnquiriesPage />} />
-              <Route path="course-enquiries/:id" element={<CourseEnquiryDetailPage />} />
               <Route path="enquiries/:id" element={<EnquiryDetailPage />} />
               <Route path="branches" element={<BranchesPage />} />
               <Route path="branches/new" element={<BranchFormPage />} />

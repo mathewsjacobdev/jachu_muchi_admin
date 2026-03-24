@@ -1,21 +1,15 @@
-import { useMemo, useState } from "react";
-import { ArrowLeft, Save } from "lucide-react";
+import { useEffect, useState } from "react";
+import { ArrowLeft, Loader2, Save } from "lucide-react";
 import { Link, useParams } from "react-router-dom";
 import PageHeader from "@/components/shared/PageHeader";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-
-type EnquiryStatus = "New" | "Contacted" | "Interested" | "Converted" | "Closed";
-
-interface EnquiryDetail {
-  id: number;
-  name: string;
-  phone: string;
-  email: string;
-  course: string;
-  message: string;
-  date: string;
-  status: EnquiryStatus;
-}
+import {
+  getEnquiryById,
+  type Enquiry,
+  type EnquiryStatus,
+  updateEnquiryNotes,
+  updateEnquiryStatus,
+} from "@/api/services/enquiry.service";
 
 const STATUS_OPTIONS: EnquiryStatus[] = [
   "New",
@@ -33,81 +27,94 @@ const statusClasses: Record<EnquiryStatus, string> = {
   Closed: "bg-red-100 text-red-700 ring-red-200/80",
 };
 
-const mockEnquiries: EnquiryDetail[] = [
-  {
-    id: 1,
-    name: "Aarav Sharma",
-    phone: "+91 98123 45678",
-    email: "aarav.sharma@example.com",
-    course: "Premium Vision Plan",
-    message:
-      "I want details about premium lenses, delivery timelines, and available frame offers.",
-    date: "19 Mar 2026",
-    status: "New",
-  },
-  {
-    id: 2,
-    name: "Priya Nair",
-    phone: "+91 99221 88441",
-    email: "priya.nair@example.com",
-    course: "Contact Lens Subscription",
-    message:
-      "Please share monthly and quarterly subscription plans with pricing and trial options.",
-    date: "18 Mar 2026",
-    status: "Contacted",
-  },
-  {
-    id: 3,
-    name: "Rahul Verma",
-    phone: "+91 98700 10022",
-    email: "rahul.verma@example.com",
-    course: "Blue Light Protection Package",
-    message:
-      "Need recommendations for computer glasses and whether zero-power lenses are included.",
-    date: "17 Mar 2026",
-    status: "Interested",
-  },
-  {
-    id: 4,
-    name: "Neha Kapoor",
-    phone: "+91 99887 55443",
-    email: "neha.kapoor@example.com",
-    course: "Progressive Lens Upgrade",
-    message:
-      "Interested in progressive lenses, looking for a quick consultation and best options.",
-    date: "16 Mar 2026",
-    status: "Converted",
-  },
-  {
-    id: 5,
-    name: "Vikram Singh",
-    phone: "+91 98989 70707",
-    email: "vikram.singh@example.com",
-    course: "Eyeglass Repair Service",
-    message:
-      "Checking repair turnaround for broken frame hinge and lens alignment correction.",
-    date: "15 Mar 2026",
-    status: "Closed",
-  },
-];
-
 const EnquiryDetailPage = () => {
   const { id } = useParams();
   const enquiryId = Number(id);
 
-  const enquiry = useMemo(
-    () => mockEnquiries.find((item) => item.id === enquiryId),
-    [enquiryId],
-  );
-
-  const [status, setStatus] = useState<EnquiryStatus>(enquiry?.status ?? "New");
+  const [enquiry, setEnquiry] = useState<Enquiry | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [status, setStatus] = useState<EnquiryStatus>("New");
   const [notes, setNotes] = useState("");
   const [saved, setSaved] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [statusBusy, setStatusBusy] = useState(false);
 
-  const handleSave = () => {
-    setSaved(true);
-    setTimeout(() => setSaved(false), 1800);
+  useEffect(() => {
+    if (!Number.isFinite(enquiryId) || enquiryId < 1) {
+      setEnquiry(null);
+      setLoading(false);
+      return;
+    }
+
+    let cancelled = false;
+    setLoading(true);
+
+    getEnquiryById(enquiryId)
+      .then((data) => {
+        if (cancelled) return;
+        if (!data) {
+          setEnquiry(null);
+          return;
+        }
+        setEnquiry(data);
+        setStatus(data.status);
+        setNotes(data.notes ?? "");
+      })
+      .catch((err) => {
+        console.error(err);
+        if (!cancelled) setEnquiry(null);
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [enquiryId]);
+
+  const handleStatusChange = async (value: EnquiryStatus) => {
+    if (!enquiry) return;
+    setStatus(value);
+    setStatusBusy(true);
+    try {
+      await updateEnquiryStatus(enquiry.id, value);
+      setEnquiry((prev) => (prev ? { ...prev, status: value } : prev));
+    } catch (err) {
+      console.error(err);
+      const fresh = await getEnquiryById(enquiry.id);
+      if (fresh) {
+        setEnquiry(fresh);
+        setStatus(fresh.status);
+      }
+    } finally {
+      setStatusBusy(false);
+    }
   };
+
+  const handleSave = async () => {
+    if (!enquiry) return;
+    setSaving(true);
+    try {
+      await updateEnquiryNotes(enquiry.id, notes);
+      setEnquiry((prev) => (prev ? { ...prev, notes } : prev));
+      setSaved(true);
+      setTimeout(() => setSaved(false), 1500);
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center gap-2 p-6 text-white">
+        <Loader2 className="h-4 w-4 animate-spin" />
+        Loading...
+      </div>
+    );
+  }
 
   if (!enquiry) {
     return (
@@ -162,10 +169,20 @@ const EnquiryDetailPage = () => {
           </div>
           <div className="space-y-1">
             <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-              Course
+              Type
             </p>
-            <p className="text-sm text-white/70">{enquiry.course}</p>
+            <p className="text-sm text-white/70">
+              {enquiry.type === "course" ? "Course Enquiry" : "Normal Enquiry"}
+            </p>
           </div>
+          {enquiry.type === "course" && enquiry.course ? (
+            <div className="space-y-1 sm:col-span-2">
+              <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                Course
+              </p>
+              <p className="text-sm text-white/70">{enquiry.course}</p>
+            </div>
+          ) : null}
           <div className="space-y-1">
             <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
               Date
@@ -182,7 +199,11 @@ const EnquiryDetailPage = () => {
               >
                 {status}
               </span>
-              <Select value={status} onValueChange={(value) => setStatus(value as EnquiryStatus)}>
+              <Select
+                value={status}
+                disabled={statusBusy}
+                onValueChange={(v) => handleStatusChange(v as EnquiryStatus)}
+              >
                 <SelectTrigger className="h-10 w-[170px] rounded-lg border border-white/20 bg-white/10 text-white backdrop-blur-lg hover:bg-white/10 data-[placeholder]:text-gray-300">
                   <SelectValue />
                 </SelectTrigger>
@@ -222,16 +243,17 @@ const EnquiryDetailPage = () => {
           />
         </div>
 
-        <div className="mt-6 flex items-center gap-3">
+        <div className="mt-6 flex flex-wrap items-center gap-3">
           <button
             type="button"
+            disabled={saving}
             onClick={handleSave}
-            className="inline-flex w-full items-center justify-center gap-2 rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white shadow-[0_0_20px_rgba(59,130,246,0.35)] transition-all duration-200 hover:scale-[1.02] hover:shadow-xl hover:bg-blue-700 sm:w-auto"
+            className="inline-flex w-full items-center justify-center gap-2 rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white shadow-[0_0_20px_rgba(59,130,246,0.35)] transition-all duration-200 hover:scale-[1.02] hover:shadow-xl hover:bg-blue-700 disabled:opacity-60 sm:w-auto"
           >
-            <Save className="h-4 w-4" />
+            {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
             Save
           </button>
-          {saved && <p className="text-xs font-medium text-green-400">Saved locally.</p>}
+          {saved && <p className="text-xs font-medium text-green-400">Saved.</p>}
         </div>
       </div>
     </div>
