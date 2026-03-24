@@ -26,7 +26,7 @@ const navSections = [
     items: [
       { label: "Dashboard", icon: LayoutDashboard, href: "/" },
       { label: "Enquiries", icon: MessageSquareText, href: "/enquiries" },
-      { label: "Course Enquiries", icon: BookOpenText, href: "/course-enquiries" },
+      // { label: "Course Enquiries", icon: BookOpenText, href: "/course-enquiries" },
       { label: "News", icon: Newspaper, href: "/news" },
     ],
   },

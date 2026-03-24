@@ -2,7 +2,10 @@ type ApiResponse<T> = {
   data: T;
 };
 
-const API_BASE_URL = "https://jsonplaceholder.typicode.com";
+/** Paste your backend base URL in `.env` as `VITE_API_URL` (no code changes elsewhere). */
+const API_BASE_URL =
+  (typeof import.meta !== "undefined" && import.meta.env?.VITE_API_URL) ||
+  "https://jsonplaceholder.typicode.com";
 
 const request = async <T>(path: string, init?: RequestInit): Promise<ApiResponse<T>> => {
   const response = await fetch(`${API_BASE_URL}${path}`, {
@@ -27,5 +30,7 @@ export const api = {
     request<T>(path, { method: "POST", body: JSON.stringify(body) }),
   put: <T>(path: string, body: unknown) =>
     request<T>(path, { method: "PUT", body: JSON.stringify(body) }),
+  patch: <T>(path: string, body: unknown) =>
+    request<T>(path, { method: "PATCH", body: JSON.stringify(body) }),
   delete: <T>(path: string) => request<T>(path, { method: "DELETE" }),
 };
