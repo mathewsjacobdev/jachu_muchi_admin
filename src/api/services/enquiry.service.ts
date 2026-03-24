@@ -114,6 +114,39 @@ const mapPostIndexToRow = (post: JsonPlaceholderPost, index: number): Enquiry =>
   };
 };
 
+const isEnquiryStatus = (x: unknown): x is EnquiryStatus =>
+  x === "New" ||
+  x === "Contacted" ||
+  x === "Interested" ||
+  x === "Converted" ||
+  x === "Closed";
+
+/** Best-effort mapping when the backend returns an unexpected but object-shaped list. */
+const mapLooseRowToEnquiry = (raw: unknown, index: number): Enquiry | null => {
+  if (!raw || typeof raw !== "object") return null;
+  const r = raw as Record<string, unknown>;
+  const idVal = r.id;
+  const parsedId =
+    typeof idVal === "number" && Number.isFinite(idVal) ? idVal : Number(idVal);
+  const id = Number.isFinite(parsedId) ? parsedId : index + 1;
+  const name = String(r.name ?? r.title ?? "").trim();
+  if (!name) return null;
+  const status: EnquiryStatus = isEnquiryStatus(r.status) ? r.status : "New";
+  const type: EnquiryType = r.type === "general" ? "general" : "course";
+  return {
+    id,
+    name,
+    phone: String(r.phone ?? ""),
+    email: String(r.email ?? ""),
+    course: String(r.course ?? ""),
+    message: String(r.message ?? r.body ?? ""),
+    date: String(r.date ?? new Date().toISOString().split("T")[0]),
+    status,
+    type,
+    notes: typeof r.notes === "string" ? r.notes : undefined,
+  };
+};
+
 export const getEnquiries = async (): Promise<Enquiry[]> => {
   const res = await api.get<unknown>(ENQUIRIES_LIST_PATH);
   const data = res.data;
@@ -124,11 +157,27 @@ export const getEnquiries = async (): Promise<Enquiry[]> => {
   if (isPlaceholderPost(data[0])) {
     return (data as JsonPlaceholderPost[]).slice(0, 5).map((post, index) => mapPostIndexToRow(post, index));
   }
-  return [];
+  console.warn(
+    "[enquiry.service] Unrecognized enquiry list shape; attempting loose row mapping.",
+    data[0],
+  );
+  const mapped = (data as unknown[])
+    .map((row, i) => mapLooseRowToEnquiry(row, i))
+    .filter((e): e is Enquiry => e !== null);
+  if (mapped.length === 0) {
+    console.warn("[enquiry.service] Loose mapping produced no rows.");
+  }
+  return mapped;
 };
 
-export const getEnquiryById = async (id: number): Promise<Enquiry | null> => {
-  const res = await api.get<unknown>(enquiryDetailPath(id));
+export const getEnquiryById = async (
+  id: number,
+  signal?: AbortSignal,
+): Promise<Enquiry | null> => {
+  const res = await api.get<unknown>(
+    enquiryDetailPath(id),
+    signal ? { signal } : undefined,
+  );
   const row = res.data;
   if (isEnquiryRow(row)) {
     return row as Enquiry;
@@ -137,6 +186,11 @@ export const getEnquiryById = async (id: number): Promise<Enquiry | null> => {
     const index = Math.max(0, Math.min(id - 1, DISPLAY_ROWS.length - 1));
     return mapPostIndexToRow(row as JsonPlaceholderPost, index);
   }
+  const loose = mapLooseRowToEnquiry(row, Math.max(0, id - 1));
+  if (loose) {
+    return { ...loose, id };
+  }
+  console.warn("[enquiry.service] Unrecognized enquiry detail shape.", row);
   return null;
 };
 

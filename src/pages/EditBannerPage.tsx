@@ -1,13 +1,14 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft, Loader2 } from "lucide-react";
 
 import PageHeader from "@/components/shared/PageHeader";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { BannerStatus, getBannerById, updateBanner } from "@/lib/banner-store";
+import type { BannerStatus } from "@/lib/banner-store";
+import { getBannerById, updateBannerApi } from "@/api/services/banner.service";
 
 const fileToDataUrl = (file: File): Promise<string> =>
   new Promise((resolve, reject) => {
@@ -20,7 +21,6 @@ const fileToDataUrl = (file: File): Promise<string> =>
 const EditBannerPage = () => {
   const { id } = useParams();
   const navigate = useNavigate();
-  const banner = useMemo(() => (id ? getBannerById(id) : undefined), [id]);
 
   const [title, setTitle] = useState("");
   const [status, setStatus] = useState<BannerStatus>("Active");
@@ -28,16 +28,38 @@ const EditBannerPage = () => {
   const [imageFile, setImageFile] = useState<File | null>(null);
   const [titleError, setTitleError] = useState("");
   const [imageError, setImageError] = useState("");
+  const [loadError, setLoadError] = useState("");
+  const [editLoading, setEditLoading] = useState(true);
+  const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
-    if (!banner) {
+    if (!id) {
       navigate("/banners");
       return;
     }
-    setTitle(banner.title);
-    setStatus(banner.status);
-    setPreviewUrl(banner.image);
-  }, [banner, navigate]);
+
+    const load = async () => {
+      setEditLoading(true);
+      setLoadError("");
+      try {
+        const banner = await getBannerById(id);
+        if (!banner) {
+          navigate("/banners");
+          return;
+        }
+        setTitle(banner.title);
+        setStatus(banner.status);
+        setPreviewUrl(banner.image);
+      } catch (e) {
+        console.error(e);
+        setLoadError("Could not load banner.");
+      } finally {
+        setEditLoading(false);
+      }
+    };
+
+    void load();
+  }, [id, navigate]);
 
   const onImageChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0] ?? null;
@@ -71,14 +93,40 @@ const EditBannerPage = () => {
     }
     setImageError("");
 
-    updateBanner(id, {
-      title: title.trim(),
-      status,
-      image: nextImage,
-    });
-
-    navigate("/banners");
+    setSubmitting(true);
+    try {
+      await updateBannerApi(id, {
+        title: title.trim(),
+        status,
+        image: nextImage,
+      });
+      navigate("/banners");
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setSubmitting(false);
+    }
   };
+
+  if (editLoading) {
+    return (
+      <div className="flex flex-col items-center justify-center gap-2 py-24 text-gray-400">
+        <Loader2 className="h-8 w-8 animate-spin" />
+        <p className="text-sm">Loading banner…</p>
+      </div>
+    );
+  }
+
+  if (loadError) {
+    return (
+      <div className="space-y-4 p-4 sm:p-6">
+        <p className="text-sm text-red-400">{loadError}</p>
+        <Button type="button" variant="outline" onClick={() => navigate("/banners")}>
+          Back to banners
+        </Button>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6 p-4 sm:p-6">
@@ -97,7 +145,7 @@ const EditBannerPage = () => {
       />
 
       <form
-        onSubmit={onSubmit}
+        onSubmit={(e) => void onSubmit(e)}
         className="space-y-4 rounded-xl border border-white/20 bg-white/10 p-6 shadow-lg backdrop-blur-lg"
       >
         <div className="space-y-1.5">
@@ -139,7 +187,16 @@ const EditBannerPage = () => {
           <Button type="button" variant="outline" onClick={() => navigate("/banners")}>
             Cancel
           </Button>
-          <Button type="submit">Update Banner</Button>
+          <Button type="submit" disabled={submitting}>
+            {submitting ? (
+              <>
+                <Loader2 className="mr-1 h-4 w-4 animate-spin" />
+                Updating…
+              </>
+            ) : (
+              "Update Banner"
+            )}
+          </Button>
         </div>
       </form>
     </div>

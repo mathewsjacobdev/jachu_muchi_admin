@@ -1,12 +1,13 @@
-import { useEffect, useMemo, useState } from "react";
-import { ArrowLeft, ImagePlus } from "lucide-react";
+import { useEffect, useState } from "react";
+import { ArrowLeft, ImagePlus, Loader2 } from "lucide-react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 
 import PageHeader from "@/components/shared/PageHeader";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Alumni, getAlumniById, upsertAlumni } from "@/lib/alumni-store";
+import type { Alumni } from "@/lib/alumni-store";
+import { createAlumni, getAlumniById, updateAlumniApi } from "@/api/services/alumni.service";
 
 const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
 
@@ -28,22 +29,39 @@ const AlumniFormPage = () => {
   const { id } = useParams();
   const navigate = useNavigate();
   const isEdit = Boolean(id);
-  const existing = useMemo(() => (id ? getAlumniById(id) : undefined), [id]);
 
   const [form, setForm] = useState(emptyForm);
   const [previewUrl, setPreviewUrl] = useState("");
   const [imageFile, setImageFile] = useState<File | null>(null);
   const [imageError, setImageError] = useState("");
+  const [editLoading, setEditLoading] = useState(isEdit);
+  const [loadError, setLoadError] = useState("");
+  const [saving, setSaving] = useState(false);
 
   useEffect(() => {
-    if (!isEdit) return;
-    if (!existing) {
-      navigate("/alumni");
-      return;
-    }
-    setForm({ name: existing.name, company: existing.company, role: existing.role });
-    setPreviewUrl(existing.image ?? "");
-  }, [existing, isEdit, navigate]);
+    if (!isEdit || !id) return;
+
+    const load = async () => {
+      setEditLoading(true);
+      setLoadError("");
+      try {
+        const existing = await getAlumniById(id);
+        if (!existing) {
+          navigate("/alumni");
+          return;
+        }
+        setForm({ name: existing.name, company: existing.company, role: existing.role });
+        setPreviewUrl(existing.image ?? "");
+      } catch (e) {
+        console.error(e);
+        setLoadError("Could not load alumni.");
+      } finally {
+        setEditLoading(false);
+      }
+    };
+
+    void load();
+  }, [id, isEdit, navigate]);
 
   const onImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0] ?? null;
@@ -64,15 +82,50 @@ const AlumniFormPage = () => {
     if (!form.name.trim()) return;
 
     const image = imageFile ? await fileToDataUrl(imageFile) : previewUrl.trim();
-    upsertAlumni({
-      id,
-      name: form.name.trim(),
-      role: form.role.trim(),
-      company: form.company.trim(),
-      image,
-    });
-    navigate("/alumni");
+    setSaving(true);
+    try {
+      if (isEdit && id) {
+        await updateAlumniApi(id, {
+          name: form.name.trim(),
+          role: form.role.trim(),
+          company: form.company.trim(),
+          image,
+        });
+      } else {
+        await createAlumni({
+          name: form.name.trim(),
+          role: form.role.trim(),
+          company: form.company.trim(),
+          image,
+        });
+      }
+      navigate("/alumni");
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setSaving(false);
+    }
   };
+
+  if (isEdit && editLoading) {
+    return (
+      <div className="flex flex-col items-center justify-center gap-2 py-24 text-gray-400">
+        <Loader2 className="h-8 w-8 animate-spin" />
+        <p className="text-sm">Loading…</p>
+      </div>
+    );
+  }
+
+  if (loadError) {
+    return (
+      <div className="space-y-4 p-4 sm:p-6">
+        <p className="text-sm text-red-400">{loadError}</p>
+        <Button type="button" variant="outline" onClick={() => navigate("/alumni")}>
+          Back
+        </Button>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6 p-4 sm:p-6">
@@ -90,7 +143,7 @@ const AlumniFormPage = () => {
         )}
       />
 
-      <form onSubmit={onSave} className="space-y-4 rounded-xl border border-white/10 bg-white/10 p-6 shadow-lg backdrop-blur-lg">
+      <form onSubmit={(e) => void onSave(e)} className="space-y-4 rounded-xl border border-white/10 bg-white/10 p-6 shadow-lg backdrop-blur-lg">
         <div className="space-y-2">
           <Label className="text-gray-200">Profile photo</Label>
           <div className="overflow-hidden rounded-lg border border-white/10 bg-white/5">
@@ -120,7 +173,10 @@ const AlumniFormPage = () => {
         </div>
 
         <div className="flex gap-2">
-          <Button type="submit">{isEdit ? "Save Changes" : "Save Alumni"}</Button>
+          <Button type="submit" disabled={saving}>
+            {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+            {isEdit ? "Save Changes" : "Save Alumni"}
+          </Button>
           <Button type="button" variant="outline" onClick={() => navigate("/alumni")}>Cancel</Button>
         </div>
       </form>

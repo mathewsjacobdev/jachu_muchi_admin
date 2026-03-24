@@ -1,27 +1,51 @@
-import { useState } from "react";
-import { MOCK_ORDERS } from "@/lib/mock-data";
-import { Order } from "@/types";
+import { useEffect, useState } from "react";
+import { Eye, Loader2 } from "lucide-react";
+import type { Order } from "@/types";
 import PageHeader from "@/components/shared/PageHeader";
 import StatusBadge from "@/components/shared/StatusBadge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { ResponsiveTable } from "@/components/ui/ResponsiveTable";
-import { Eye } from "lucide-react";
+import { getOrders, updateOrderStatusApi } from "@/api/services/order.service";
 
 const OrdersPage = () => {
-  const [orders, setOrders] = useState<Order[]>(MOCK_ORDERS);
+  const [orders, setOrders] = useState<Order[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
   const [filter, setFilter] = useState<string>("all");
   const [detail, setDetail] = useState<Order | null>(null);
 
+  useEffect(() => {
+    const load = async () => {
+      setIsLoading(true);
+      try {
+        setOrders(await getOrders());
+      } catch (e) {
+        console.error(e);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    void load();
+  }, []);
+
   const filtered = filter === "all" ? orders : orders.filter((o) => o.status === filter);
 
-  const updateStatus = (id: string, status: Order["status"]) => {
-    setOrders(orders.map((o) => o.id === id ? { ...o, status } : o));
+  const updateStatus = async (id: string, status: Order["status"]) => {
+    const prev = orders.find((o) => o.id === id)?.status;
+    setOrders((list) => list.map((o) => (o.id === id ? { ...o, status } : o)));
+    try {
+      await updateOrderStatusApi(id, status);
+    } catch (e) {
+      console.error(e);
+      if (prev) {
+        setOrders((list) => list.map((o) => (o.id === id ? { ...o, status: prev } : o)));
+      }
+    }
   };
 
   return (
     <div className="space-y-6">
-      <PageHeader title="Orders" description={`${orders.length} total orders`} action={
+      <PageHeader title="Orders" description={isLoading ? "Loading…" : `${orders.length} total orders`} action={
         <Select value={filter} onValueChange={setFilter}>
           <SelectTrigger className="w-36"><SelectValue placeholder="Filter" /></SelectTrigger>
           <SelectContent>
@@ -33,7 +57,12 @@ const OrdersPage = () => {
         </Select>
       } />
 
-      {filtered.length === 0 ? (
+      {isLoading ? (
+        <div className="flex items-center justify-center gap-2 py-16 text-gray-400">
+          <Loader2 className="h-6 w-6 animate-spin" />
+          <span className="text-sm">Loading orders…</span>
+        </div>
+      ) : filtered.length === 0 ? (
         <div className="p-8 text-center text-sm text-white/50">No orders found</div>
       ) : (
         <ResponsiveTable
@@ -54,11 +83,9 @@ const OrdersPage = () => {
               render: (o) => (
                 <Select
                   value={(o as Order).status}
-                  onValueChange={(v) =>
-                    updateStatus((o as Order).id, v as Order["status"])
-                  }
+                  onValueChange={(v) => void updateStatus((o as Order).id, v as Order["status"])}
                 >
-                  <SelectTrigger className="h-7 w-28 text-xs border-0 shadow-none p-0">
+                  <SelectTrigger className="h-7 w-28 border-0 shadow-none p-0">
                     <StatusBadge status={(o as Order).status} />
                   </SelectTrigger>
                   <SelectContent>
@@ -75,6 +102,7 @@ const OrdersPage = () => {
           ]}
           renderActions={(o) => (
             <button
+              type="button"
               onClick={() => setDetail(o)}
               className="rounded-lg p-2 text-blue-400 transition-all duration-200 hover:scale-[1.02] hover:bg-white/10"
               aria-label={`View order ${o.id}`}
