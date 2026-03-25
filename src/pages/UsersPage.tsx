@@ -8,6 +8,15 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import {
+  Pagination,
+  PaginationContent,
+  PaginationEllipsis,
+  PaginationItem,
+  PaginationLink,
+  PaginationNext,
+  PaginationPrevious,
+} from "@/components/ui/pagination";
+import {
   createManagedUser,
   deleteManagedUserApi,
   getManagedUsers,
@@ -45,6 +54,9 @@ const UsersPage = () => {
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(9);
+
   useEffect(() => {
     const load = async () => {
       setIsLoading(true);
@@ -67,6 +79,19 @@ const UsersPage = () => {
       user.role.toLowerCase().includes(query)
     );
   }, [users, search]);
+
+  const totalPages = useMemo(() => {
+    const total = Math.ceil(filteredUsers.length / pageSize);
+    return total > 0 ? total : 1;
+  }, [filteredUsers.length, pageSize]);
+
+  useEffect(() => setPage(1), [search, pageSize]);
+  useEffect(() => setPage((p) => Math.min(p, totalPages)), [totalPages]);
+
+  const paginatedUsers = useMemo(() => {
+    const start = (page - 1) * pageSize;
+    return filteredUsers.slice(start, start + pageSize);
+  }, [filteredUsers, page, pageSize]);
 
   const openAdd = () => {
     setEditing(null);
@@ -159,15 +184,42 @@ const UsersPage = () => {
         )}
       />
 
-      <div className="max-w-sm">
-        <div className="relative">
-          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-blue-400" />
-          <Input
-            placeholder="Search users..."
-            className="pl-9"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-          />
+      <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+        <div className="max-w-sm w-full">
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-blue-400" />
+            <Input
+              placeholder="Search users..."
+              className="pl-9"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+            />
+          </div>
+        </div>
+
+        <div className="flex justify-end">
+          <Select
+            value={String(pageSize)}
+            onValueChange={(value) => {
+              setPageSize(Number(value));
+              setPage(1);
+            }}
+          >
+            <SelectTrigger className="h-10 w-full rounded-lg border border-white/20 bg-white/10 text-white backdrop-blur-lg hover:bg-white/10 data-[placeholder]:text-gray-300 sm:w-44">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent className="border border-white/10 bg-slate-900 text-white">
+              {[6, 9, 12].map((size) => (
+                <SelectItem
+                  key={size}
+                  value={String(size)}
+                  className="focus:bg-white/10 focus:text-white data-[state=checked]:bg-blue-500/20 data-[state=checked]:text-blue-200"
+                >
+                  {size}/page
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         </div>
       </div>
 
@@ -181,8 +233,9 @@ const UsersPage = () => {
           No users found.
         </div>
       ) : (
-        <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
-          {filteredUsers.map((user) => (
+        <>
+          <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
+            {paginatedUsers.map((user) => (
             <div
               key={user.id}
               className="rounded-xl border border-white/20 bg-white/10 p-5 shadow-lg backdrop-blur-lg transition-all duration-300 hover:-translate-y-1 hover:shadow-2xl"
@@ -235,8 +288,100 @@ const UsersPage = () => {
                 </Button>
               </div>
             </div>
-          ))}
-        </div>
+            ))}
+          </div>
+
+          {totalPages > 1 ? (
+            <div className="pt-4">
+              <Pagination>
+                <PaginationContent>
+                  <PaginationItem>
+                    <PaginationPrevious
+                      href="#"
+                      onClick={(e) => {
+                        e.preventDefault();
+                        setPage((p) => Math.max(1, p - 1));
+                      }}
+                      className={page <= 1 ? "pointer-events-none opacity-50" : undefined}
+                    />
+                  </PaginationItem>
+                  {(() => {
+                    const window = 2;
+                    const start = Math.max(1, page - window);
+                    const end = Math.min(totalPages, page + window);
+                    const showLeftEllipsis = start > 1;
+                    const showRightEllipsis = end < totalPages;
+                    const pagesToShow: number[] = [];
+                    for (let p = start; p <= end; p++) pagesToShow.push(p);
+                    return (
+                      <>
+                        {showLeftEllipsis ? (
+                          <PaginationItem>
+                            <PaginationLink
+                              href="#"
+                              onClick={(e) => {
+                                e.preventDefault();
+                                setPage(1);
+                              }}
+                              isActive={page === 1}
+                            >
+                              1
+                            </PaginationLink>
+                          </PaginationItem>
+                        ) : null}
+                        {showLeftEllipsis ? <PaginationEllipsis /> : null}
+                        {pagesToShow.map((p) => (
+                          <PaginationItem key={p}>
+                            <PaginationLink
+                              href="#"
+                              onClick={(e) => {
+                                e.preventDefault();
+                                setPage(p);
+                              }}
+                              isActive={p === page}
+                            >
+                              {p}
+                            </PaginationLink>
+                          </PaginationItem>
+                        ))}
+                        {showRightEllipsis ? <PaginationEllipsis /> : null}
+                        {showRightEllipsis ? (
+                          <PaginationItem>
+                            <PaginationLink
+                              href="#"
+                              onClick={(e) => {
+                                e.preventDefault();
+                                setPage(totalPages);
+                              }}
+                              isActive={page === totalPages}
+                            >
+                              {totalPages}
+                            </PaginationLink>
+                          </PaginationItem>
+                        ) : null}
+                      </>
+                    );
+                  })()}
+                  <PaginationItem>
+                    <PaginationNext
+                      href="#"
+                      onClick={(e) => {
+                        e.preventDefault();
+                        setPage((p) => Math.min(totalPages, p + 1));
+                      }}
+                      className={page >= totalPages ? "pointer-events-none opacity-50" : undefined}
+                    />
+                  </PaginationItem>
+                </PaginationContent>
+              </Pagination>
+              <div className="mt-3 text-center text-sm text-gray-400">
+                Showing{" "}
+                {Math.min((page - 1) * pageSize + 1, filteredUsers.length)}-
+                {Math.min(page * pageSize, filteredUsers.length)} of {filteredUsers.length}
+              </div>
+            </div>
+          ) : null}
+        </>
       )}
 
       <Dialog open={formOpen} onOpenChange={setFormOpen}>
