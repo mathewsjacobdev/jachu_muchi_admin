@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Link, useNavigate, useParams } from "react-router-dom";
+import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
 import { ArrowLeft, Loader2 } from "lucide-react";
 
 import PageHeader from "@/components/shared/PageHeader";
@@ -7,8 +7,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import type { BannerStatus } from "@/lib/banner-store";
-import { getBannerById, updateBannerApi } from "@/api/services/banner.service";
+import type { BannerItem, BannerStatus } from "@/lib/banner-store";
+import { updateBannerApi } from "@/api/services/banner.service";
 
 const fileToDataUrl = (file: File): Promise<string> =>
   new Promise((resolve, reject) => {
@@ -21,6 +21,7 @@ const fileToDataUrl = (file: File): Promise<string> =>
 const EditBannerPage = () => {
   const { id } = useParams();
   const navigate = useNavigate();
+  const location = useLocation();
 
   const [title, setTitle] = useState("");
   const [status, setStatus] = useState<BannerStatus>("Active");
@@ -38,28 +39,25 @@ const EditBannerPage = () => {
       return;
     }
 
-    const load = async () => {
-      setEditLoading(true);
-      setLoadError("");
-      try {
-        const banner = await getBannerById(id);
-        if (!banner) {
-          navigate("/banners");
-          return;
-        }
-        setTitle(banner.title);
-        setStatus(banner.status);
-        setPreviewUrl(banner.image);
-      } catch (e) {
-        console.error(e);
-        setLoadError("Could not load banner.");
-      } finally {
-        setEditLoading(false);
-      }
-    };
+    const state = location.state as BannerItem | null | undefined;
+    const isValidState =
+      state &&
+      typeof state === "object" &&
+      typeof state.title === "string" &&
+      typeof state.image === "string" &&
+      (state.status === "Active" || state.status === "Inactive");
 
-    void load();
-  }, [id, navigate]);
+    if (!isValidState) {
+      navigate("/banners");
+      return;
+    }
+
+    setTitle(state.title);
+    setStatus(state.status);
+    setPreviewUrl(state.image);
+    setEditLoading(false);
+    setLoadError("");
+  }, [id, location.state, navigate]);
 
   const onImageChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0] ?? null;

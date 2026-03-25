@@ -10,7 +10,9 @@ export interface GalleryItem {
 }
 
 const PHOTOS_PATH = "/photos";
-export const galleryItemPath = (id: string) => `/photos/${id}`;
+const GALLERY_PATH = "/gallery";
+const JP_FALLBACK_PATH = "/photos";
+export const galleryItemPath = (id: string) => `${GALLERY_PATH}/${id}`;
 
 type JsonPlaceholderPhoto = {
   id: number;
@@ -60,8 +62,41 @@ const rowToGalleryItem = (raw: Record<string, unknown>): GalleryItem => {
 const remoteUrl = (image: string): string =>
   image.startsWith("http") ? image : `https://picsum.photos/seed/${Date.now()}/600/400`;
 
+const isBlobUrl = (value: string): boolean => value.startsWith("blob:");
+
+const blobToDataUrl = (blob: Blob): Promise<string> =>
+  new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result ?? ""));
+    reader.onerror = () => reject(new Error("Failed to read image"));
+    reader.readAsDataURL(blob);
+  });
+
+const imageToBase64 = async (image: string): Promise<string> => {
+  // For real backend we send base64/data-url. If UI provides an already remote URL or data URL, keep it.
+  if (!isBlobUrl(image)) return image;
+  const res = await fetch(image);
+  const blob = await res.blob();
+  return blobToDataUrl(blob);
+};
+
+const shouldFallbackToJsonPlaceholder = (err: unknown): boolean => {
+  const msg = err instanceof Error ? err.message : String(err);
+  return msg.includes("status 404");
+};
+
 export const getGalleryItems = async (): Promise<GalleryItem[]> => {
-  const res = await api.get<unknown>(`${PHOTOS_PATH}?_limit=30`);
+  const tryGet = async (path: string) =>
+    api.get<unknown>(`${path}?_limit=30`);
+
+  let res;
+  try {
+    res = await tryGet(GALLERY_PATH);
+  } catch (e) {
+    if (!shouldFallbackToJsonPlaceholder(e)) throw e;
+    res = await tryGet(JP_FALLBACK_PATH);
+  }
+
   const data = res.data;
   if (!Array.isArray(data) || data.length === 0) return [];
   if (isGalleryRow(data[0])) return data as GalleryItem[];
@@ -74,23 +109,49 @@ export const getGalleryItems = async (): Promise<GalleryItem[]> => {
 export const createGalleryItem = async (
   payload: Omit<GalleryItem, "id">,
 ): Promise<GalleryItem> => {
-  const albumId =
-    payload.category === "Campus" ? 1 : payload.category === "Labs" ? 2 : 3;
-  const res = await api.post<Record<string, unknown>>(PHOTOS_PATH, {
-    albumId,
-    title: payload.title,
-    url: remoteUrl(payload.image),
-    thumbnailUrl: remoteUrl(payload.image),
-  });
+  const base64Image = await imageToBase64(payload.image);
+
+  // Backend payload contract (real API):
+  // { title, category, image }
+  // For dummy JSONPlaceholder we fallback to `/photos`, but we still keep the backend-shaped payload.
+  let res: { data: unknown };
+  try {
+    res = await api.post<Record<string, unknown>>(GALLERY_PATH, {
+      title: payload.title,
+      category: payload.category,
+      image: base64Image,
+    });
+  } catch (e) {
+    if (!shouldFallbackToJsonPlaceholder(e)) throw e;
+    res = await api.post<Record<string, unknown>>(JP_FALLBACK_PATH, {
+      title: payload.title,
+      category: payload.category,
+      image: base64Image,
+    });
+  }
+
   const id = res.data.id != null ? String(res.data.id) : Date.now().toString();
   return {
     id,
     title: payload.title,
     category: payload.category,
-    image: typeof res.data.url === "string" ? String(res.data.url) : remoteUrl(payload.image),
+    image:
+      typeof res.data.image === "string"
+        ? String(res.data.image)
+        : base64Image
+          ? base64Image
+          : remoteUrl(payload.image),
   };
 };
 
 export const deleteGalleryItemApi = async (id: string): Promise<void> => {
-  await api.delete(galleryItemPath(id));
+  try {
+    await api.delete(galleryItemPath(id));
+  } catch (e) {
+    if (shouldFallbackToJsonPlaceholder(e)) {
+      await api.delete(`${JP_FALLBACK_PATH}/${id}`);
+      return;
+    }
+    throw e;
+  }
 };
