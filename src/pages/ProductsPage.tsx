@@ -21,8 +21,8 @@ const CARD_FALLBACK = "https://via.placeholder.com/400x200?text=Course";
 
 type CourseCardProps = {
   course: CourseListItem;
-  onEdit: (id: number) => void;
-  onRequestDelete: (id: number) => void;
+  onEdit: (id: string) => void;
+  onRequestDelete: (id: string) => void;
 };
 
 const CourseCard = memo(function CourseCard({ course, onEdit, onRequestDelete }: CourseCardProps) {
@@ -93,7 +93,7 @@ const ProductsPage = () => {
   const [courses, setCourses] = useState<CourseListItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
-  const [deleteId, setDeleteId] = useState<number | null>(null);
+  const [deleteId, setDeleteId] = useState<string | null>(null);
 
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(9);
@@ -108,6 +108,8 @@ const ProductsPage = () => {
       setLoading(true);
       try {
         const data = await getCourses(controller.signal);
+        console.log({data});
+        
         if (!cancelled) setCourses(data);
       } catch (e) {
         if ((e as Error).name === "AbortError") return;
@@ -151,13 +153,16 @@ const ProductsPage = () => {
   }, [filtered, page, pageSize]);
 
   const onEdit = useCallback(
-    (id: number) => {
-      navigate(`/courses/edit/${id}`);
+    (id: string) => {
+      const selectedCourse = courses.find((course) => course.id === id);
+      navigate(`/courses/edit/${id}`, {
+        state: selectedCourse ? { course: selectedCourse } : undefined,
+      });
     },
-    [navigate],
+    [courses, navigate],
   );
 
-  const onRequestDelete = useCallback((id: number) => {
+  const onRequestDelete = useCallback((id: string) => {
     setDeleteId(id);
   }, []);
 

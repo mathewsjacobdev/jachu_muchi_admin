@@ -1,98 +1,98 @@
 import { api } from "../client";
 
-/**
- * Dummy API: uses `/albums` so it does not clash with enquiries (`/posts`) or news (`/comments`).
- */
-export const COURSES_LIST_PATH = "/albums";
-const courseDetailPath = (id: string) => `/albums/${id}`;
-
-const DEFAULT_CARD_IMAGE =
-  "https://images.unsplash.com/photo-1581093458791-9d2c6c3f0c0f?w=600";
+export const COURSES_LIST_PATH = "/courses/all";
+const COURSES_BASE_PATH = "/courses";
+const courseDetailPath = (id: string) => `${COURSES_BASE_PATH}/${id}`;
 
 export type CourseListItem = {
-  id: number;
+  id: string;
   courseName: string;
   type: string;
   duration: string;
   eligibility: string;
   keyDetails: string;
+  status: "Active" | "Inactive";
   image: string;
 };
 
 export type CoursePayload = {
-  title: string;
-  body: string;
+  // New backend shape
+  courseName?: string;
+  keyDetails?: string;
   duration?: string;
   eligibility?: string;
   type?: string;
+  imageUrl?: string;
+  imageFile?: File | null;
+  status?: "Active" | "Inactive";
+  // Backward-compat keys used by existing UI calls
+  title?: string;
+  body?: string;
   image?: string;
 };
 
-type JsonPlaceholderAlbum = {
-  id: number;
-  userId: number;
-  title: string;
+type CourseListApiRow = {
+  _id: string;
+  name: string;
+  type?: string;
+  duration?: string;
+  eligibility?: string;
+  keyDetails?: string;
+  status?: boolean | "Active" | "Inactive";
+  imageUrl?: string;
 };
 
-const isPlaceholderAlbum = (x: unknown): x is JsonPlaceholderAlbum =>
-  typeof x === "object" &&
-  x !== null &&
-  typeof (x as JsonPlaceholderAlbum).id === "number" &&
-  typeof (x as JsonPlaceholderAlbum).title === "string" &&
-  "userId" in x &&
-  !("body" in x);
+const isRecord = (x: unknown): x is Record<string, unknown> =>
+  typeof x === "object" && x !== null && !Array.isArray(x);
 
-/** Row already shaped like our list item (real API). */
-const isCourseListRow = (x: unknown): x is CourseListItem =>
-  typeof x === "object" &&
-  x !== null &&
-  typeof (x as CourseListItem).id === "number" &&
-  typeof (x as CourseListItem).courseName === "string";
+const isCourseListApiRow = (x: unknown): x is CourseListApiRow =>
+  isRecord(x) && typeof x._id === "string" && typeof x.name === "string";
 
-const mapAlbumToListItem = (a: JsonPlaceholderAlbum): CourseListItem => ({
-  id: a.id,
-  courseName: a.title,
-  keyDetails: `Course programme · cohort ref #${a.userId}`,
-  type: "Demo Type",
-  duration: "12 Months",
-  eligibility: "Plus Two",
-  image: DEFAULT_CARD_IMAGE,
+const toAbsoluteImageUrl = (imageUrl?: string): string => {
+  if (!imageUrl) return "";
+  if (/^https?:\/\//i.test(imageUrl)) return imageUrl;
+  const apiBase =
+    (typeof import.meta !== "undefined" && import.meta.env?.VITE_API_URL) || "";
+  return apiBase ? `${apiBase}${imageUrl}` : imageUrl;
+};
+
+// const mapListRowToUi = (item: CourseListApiRow): CourseListItem => ({
+//   id: item._id,
+//   courseName: item.name,
+//   type: item.type ?? "",
+//   duration: item.duration ?? "",
+//   eligibility: item.eligibility ?? "",
+//   keyDetails: item.keyDetails ?? "",
+//   status:
+//     item.status === "Active" || item.status === true
+//       ? "Active"
+//       : "Inactive",
+//   image: item.imageUrl || "",
+// });
+const mapListRowToUi = (item: CourseListApiRow): CourseListItem => ({
+  id: item._id,
+  courseName: item.name,
+  type: item.type ?? "",
+  duration: item.duration ?? "",
+  eligibility: item.eligibility ?? "",
+  keyDetails: item.keyDetails ?? "",
+  status:
+    item.status === "Active" || item.status === true
+      ? "Active"
+      : "Inactive",
+  image: toAbsoluteImageUrl(item.imageUrl),
 });
 
-const rowToListItem = (raw: Record<string, unknown>): CourseListItem => {
-  const rawId = raw.id;
-  const id =
-    typeof rawId === "number" && Number.isFinite(rawId)
-      ? rawId
-      : Number(rawId);
-  return {
-    id: Number.isFinite(id) ? id : 0,
-    courseName: String(raw.courseName ?? raw.title ?? ""),
-    keyDetails: String(raw.keyDetails ?? raw.body ?? ""),
-    type: String(raw.type ?? "General"),
-    duration: String(raw.duration ?? ""),
-    eligibility: String(raw.eligibility ?? ""),
-    image: typeof raw.image === "string" && raw.image ? raw.image : DEFAULT_CARD_IMAGE,
-  };
-};
-
 export const mapCoursesResponse = (data: unknown): CourseListItem[] => {
-  if (!Array.isArray(data) || data.length === 0) return [];
-  const first = data[0];
-  if (isCourseListRow(first)) return data as CourseListItem[];
-  if (isPlaceholderAlbum(first)) {
-    return (data as JsonPlaceholderAlbum[]).slice(0, 30).map(mapAlbumToListItem);
-  }
-  console.warn(
-    "[course.service] Unrecognized course list shape; attempting generic row mapping.",
-    first,
-  );
-  try {
-    return (data as Record<string, unknown>[]).map((item) => rowToListItem(item));
-  } catch (e) {
-    console.warn("[course.service] Generic mapping failed.", e);
-    return [];
-  }
+  if (!isRecord(data)) return [];
+
+  const nested = data.data;
+  const actual = isRecord(nested) ? nested.data : nested;
+
+  if (!Array.isArray(actual)) return [];
+  return actual
+    .filter((row): row is CourseListApiRow => isCourseListApiRow(row))
+    .map(mapListRowToUi);
 };
 
 export const getCourses = async (signal?: AbortSignal): Promise<CourseListItem[]> => {
@@ -109,29 +109,22 @@ export type CourseFormState = {
   imageUrl?: string;
 };
 
-export const mapCourseDetailToForm = (raw: Record<string, unknown>): CourseFormState => ({
-  courseName: String(raw.courseName ?? raw.title ?? ""),
-  type: String(raw.type ?? ""),
-  duration: String(raw.duration ?? ""),
-  eligibility: String(raw.eligibility ?? ""),
-  keyDetails: String(raw.keyDetails ?? raw.body ?? ""),
-  imageUrl: typeof raw.image === "string" && raw.image ? raw.image : undefined,
-});
+export const mapCourseDetailToForm = (raw: Record<string, unknown>): CourseFormState => {
+  const detail = isRecord(raw.data) ? raw.data : raw;
+  return {
+    courseName: String(detail.name ?? ""),
+    type: String(detail.type ?? ""),
+    duration: String(detail.duration ?? ""),
+    eligibility: String(detail.eligibility ?? ""),
+    keyDetails: String(detail.keyDetails ?? ""),
+    imageUrl: typeof detail.imageUrl === "string" ? detail.imageUrl : undefined,
+  };
+};
 
 export const getCourse = async (id: string, signal?: AbortSignal): Promise<CourseFormState> => {
   const res = await api.get<unknown>(courseDetailPath(id), signal ? { signal } : undefined);
-  const row = res.data;
-  if (row && typeof row === "object" && !Array.isArray(row)) {
-    if (isPlaceholderAlbum(row)) {
-      return {
-        courseName: row.title,
-        type: "Fellowship",
-        duration: "12 Months",
-        eligibility: "Demo",
-        keyDetails: `Details for "${row.title}" (program #${row.id}).`,
-      };
-    }
-    return mapCourseDetailToForm(row as Record<string, unknown>);
+  if (isRecord(res.data)) {
+    return mapCourseDetailToForm(res.data);
   }
   return {
     courseName: "",
@@ -142,20 +135,32 @@ export const getCourse = async (id: string, signal?: AbortSignal): Promise<Cours
   };
 };
 
+const toFormData = (data: CoursePayload): FormData => {
+  const formData = new FormData();
+  const courseName = data.courseName ?? data.title ?? "";
+  const keyDetails = data.keyDetails ?? data.body ?? "";
+
+  formData.append("name", courseName);
+  formData.append("type", data.type ?? "");
+  formData.append("duration", data.duration ?? "");
+  formData.append("keyDetails", keyDetails);
+  formData.append("eligibility", data.eligibility ?? "");
+  formData.append("status", data.status ?? "Active");
+
+  if (data.imageFile) {
+    formData.append("courseImage", data.imageFile);
+  }
+
+  return formData;
+};
+
 export const createCourse = async (data: CoursePayload) => {
-  const res = await api.post<Record<string, unknown>>(COURSES_LIST_PATH, {
-    userId: 1,
-    title: data.title,
-  });
+  const res = await api.post<Record<string, unknown>>(COURSES_BASE_PATH, toFormData(data));
   return res.data;
 };
 
 export const updateCourse = async (id: string, data: CoursePayload) => {
-  const res = await api.put<Record<string, unknown>>(courseDetailPath(id), {
-    id: Number(id),
-    userId: 1,
-    title: data.title,
-  });
+  const res = await api.put<Record<string, unknown>>(courseDetailPath(id), toFormData(data));
   return res.data;
 };
 

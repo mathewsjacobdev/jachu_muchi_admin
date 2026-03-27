@@ -1,28 +1,23 @@
 import { api } from "../client";
 import type { Category } from "@/types";
 
-/**
- * Dummy API: uses `/photos` so courses can own `/albums` without clashing.
- * (Other features also use `/photos` for JP; production should use dedicated routes.)
- */
-export const CATEGORIES_LIST_PATH = "/photos";
-export const categoryDetailPath = (id: string) => `/photos/${id}`;
+export const CATEGORIES_LIST_PATH = "/categories/all";
+const CATEGORIES_BASE_PATH = "/categories";
+export const categoryDetailPath = (id: string) => `${CATEGORIES_BASE_PATH}/${id}`;
 
-type JsonPlaceholderPhoto = {
-  id: number;
-  albumId: number;
-  title: string;
-  url: string;
-  thumbnailUrl?: string;
+type CategoryApiRow = {
+  _id: string;
+  name: string;
+  productCount?: number;
+  status?: boolean;
+  createdAt?: string;
 };
 
-const isJpPhoto = (x: unknown): x is JsonPlaceholderPhoto =>
+const isCategoryApiRow = (x: unknown): x is CategoryApiRow =>
   typeof x === "object" &&
   x !== null &&
-  typeof (x as JsonPlaceholderPhoto).id === "number" &&
-  typeof (x as JsonPlaceholderPhoto).title === "string" &&
-  typeof (x as JsonPlaceholderPhoto).url === "string" &&
-  "albumId" in x;
+  typeof (x as CategoryApiRow)._id === "string" &&
+  typeof (x as CategoryApiRow).name === "string";
 
 const isCategoryRow = (x: unknown): x is Category =>
   typeof x === "object" &&
@@ -31,33 +26,37 @@ const isCategoryRow = (x: unknown): x is Category =>
   typeof (x as Category).name === "string" &&
   typeof (x as Category).productCount === "number";
 
-const mapPhotoToCategory = (p: JsonPlaceholderPhoto): Category => ({
-  id: String(p.id),
-  name: p.title,
-  productCount: (p.albumId * 7 + p.id * 3) % 200,
+const mapApiCategoryToCategory = (row: CategoryApiRow): Category => ({
+  id: row._id,
+  name: row.name,
+  productCount: typeof row.productCount === "number" ? row.productCount : 0,
 });
 
 const rowToCategory = (raw: Record<string, unknown>): Category => ({
-  id: String(raw.id),
-  name: String(raw.name ?? raw.title ?? ""),
+  id: String(raw.id ?? raw._id ?? ""),
+  name: String(raw.name ?? ""),
   productCount: typeof raw.productCount === "number" ? raw.productCount : 0,
 });
 
 export const getCategories = async (): Promise<Category[]> => {
-  const res = await api.get<unknown>(`${CATEGORIES_LIST_PATH}?_limit=100`);
+  const res = await api.get<unknown>(CATEGORIES_LIST_PATH);
   const data = res.data;
-  if (!Array.isArray(data) || data.length === 0) return [];
-  const first = data[0];
-  if (isCategoryRow(first)) return data as Category[];
-  if (isJpPhoto(first)) {
-    return (data as JsonPlaceholderPhoto[]).map(mapPhotoToCategory);
-  }
-  console.warn(
-    "[category.service] Unrecognized category list shape; attempting generic row mapping.",
-    first,
+  const list = (
+    typeof data === "object" &&
+    data !== null &&
+    "data" in data &&
+    Array.isArray((data as { data?: unknown }).data)
+      ? (data as { data: unknown[] }).data
+      : data
   );
+  if (!Array.isArray(list) || list.length === 0) return [];
+  const first = list[0];
+  if (isCategoryRow(first)) return list as Category[];
+  if (isCategoryApiRow(first)) {
+    return (list as CategoryApiRow[]).map(mapApiCategoryToCategory);
+  }
   try {
-    return data.map((item) => rowToCategory(item as Record<string, unknown>));
+    return list.map((item) => rowToCategory(item as Record<string, unknown>));
   } catch (e) {
     console.warn("[category.service] Generic mapping failed.", e);
     return [];
@@ -65,28 +64,42 @@ export const getCategories = async (): Promise<Category[]> => {
 };
 
 export const createCategory = async (payload: Omit<Category, "id">): Promise<Category> => {
-  const res = await api.post<Record<string, unknown>>(CATEGORIES_LIST_PATH, {
-    albumId: 1,
-    title: payload.name,
-    url: "https://via.placeholder.com/150",
-    thumbnailUrl: "https://via.placeholder.com/150",
+  const categoryName = payload.name.trim();
+  const res = await api.post<Record<string, unknown>>(CATEGORIES_BASE_PATH, {
+    name: categoryName,
   });
   const data = res.data ?? {};
-  const id = data.id != null ? String(data.id) : Date.now().toString();
+  const createdRow =
+    typeof data === "object" &&
+    data !== null &&
+    "data" in data &&
+    typeof (data as { data?: unknown }).data === "object" &&
+    (data as { data?: unknown }).data !== null
+      ? ((data as { data: Record<string, unknown> }).data ?? {})
+      : (data as Record<string, unknown>);
+  const id =
+    createdRow._id != null
+      ? String(createdRow._id)
+      : createdRow.id != null
+        ? String(createdRow.id)
+        : Date.now().toString();
   return {
     id,
-    name: payload.name,
-    productCount: payload.productCount,
+    name:
+      typeof createdRow.name === "string" && createdRow.name.trim()
+        ? createdRow.name
+        : payload.name,
+    productCount:
+      typeof createdRow.productCount === "number"
+        ? createdRow.productCount
+        : payload.productCount,
   };
 };
 
 export const updateCategoryApi = async (id: string, payload: Partial<Omit<Category, "id">>): Promise<void> => {
+  const categoryName = typeof payload.name === "string" ? payload.name.trim() : "";
   await api.put(categoryDetailPath(id), {
-    id: Number(id) || id,
-    albumId: 1,
-    title: payload.name,
-    url: "https://via.placeholder.com/150",
-    productCount: payload.productCount,
+    ...(categoryName ? { name: categoryName } : {}),
   });
 };
 

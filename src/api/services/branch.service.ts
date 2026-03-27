@@ -1,20 +1,18 @@
 import { api } from "../client";
 import type { Branch, BranchStatus } from "@/lib/branch-store";
 
-/**
- * Set `BRANCHES_LIST_PATH` / `branchDetailPath` when your backend routes differ.
- * Placeholder: `GET /users` and map to `Branch`.
- */
-export const BRANCHES_LIST_PATH = "/users";
-export const branchDetailPath = (id: string) => `/users/${id}`;
+export const BRANCHES_LIST_PATH = "/branches/all";
+const BRANCHES_BASE_PATH = "/branches";
+export const branchDetailPath = (id: string) => `${BRANCHES_BASE_PATH}/${id}`;
 
-type JsonPlaceholderUser = {
-  id: number;
+type BranchApiRow = {
+  _id: string;
   name: string;
-  email: string;
-  phone?: string;
-  website?: string;
-  address?: { street?: string; city?: string };
+  location?: string;
+  phoneNumbers?: string[];
+  mapUrl?: string;
+  email?: string;
+  status?: BranchStatus | string;
 };
 
 const isBranchRow = (x: unknown): x is Branch =>
@@ -24,39 +22,37 @@ const isBranchRow = (x: unknown): x is Branch =>
   Array.isArray((x as Branch).phones) &&
   typeof (x as Branch).id === "string";
 
-const isJpUser = (x: unknown): x is JsonPlaceholderUser =>
+const isRecord = (x: unknown): x is Record<string, unknown> =>
+  typeof x === "object" && x !== null;
+
+const isBranchApiRow = (x: unknown): x is BranchApiRow =>
   typeof x === "object" &&
   x !== null &&
-  typeof (x as JsonPlaceholderUser).id === "number" &&
-  typeof (x as JsonPlaceholderUser).name === "string" &&
-  "email" in x;
+  typeof (x as BranchApiRow)._id === "string" &&
+  typeof (x as BranchApiRow).name === "string";
 
-const websiteToMapUrl = (w: string | undefined): string => {
-  if (!w?.trim()) return "https://maps.google.com";
-  return w.startsWith("http") ? w : `https://${w}`;
-};
+const normalizeStatus = (raw: unknown): BranchStatus =>
+  raw === "Inactive" ? "Inactive" : "Active";
 
-const mapJpUserToBranch = (u: JsonPlaceholderUser): Branch => {
-  const phone = u.phone?.trim() ?? "";
-  const city = u.address?.city ?? "";
-  const street = u.address?.street ?? "";
-  const location = [city, street].filter(Boolean).join(", ") || "—";
-  return {
-    id: String(u.id),
-    name: u.name,
-    phones: phone ? phone.split(/\s*,\s*|\s*;\s*/).filter(Boolean) : [],
-    email: typeof u.email === "string" ? u.email : "",
-    location,
-    mapUrl: websiteToMapUrl(u.website),
-    status: u.id % 2 === 0 ? "Active" : "Inactive",
-  };
-};
+const mapApiRowToBranch = (row: BranchApiRow): Branch => ({
+  id: row._id,
+  name: row.name,
+  phones: Array.isArray(row.phoneNumbers)
+    ? row.phoneNumbers.filter((p): p is string => typeof p === "string")
+    : [],
+  email: typeof row.email === "string" ? row.email : "",
+  location: typeof row.location === "string" ? row.location : "",
+  mapUrl: typeof row.mapUrl === "string" ? row.mapUrl : "",
+  status: normalizeStatus(row.status),
+});
 
 const rowToBranch = (raw: Record<string, unknown>): Branch => {
   const id = raw.id != null ? String(raw.id) : "";
   const phones =
     Array.isArray(raw.phones) && raw.phones.every((p) => typeof p === "string")
       ? (raw.phones as string[])
+      : Array.isArray(raw.phoneNumbers) && raw.phoneNumbers.every((p) => typeof p === "string")
+        ? (raw.phoneNumbers as string[])
       : typeof raw.phone === "string" && raw.phone.trim()
         ? raw.phone.split(/\s*,\s*|\s*;\s*/).filter(Boolean)
         : [];
@@ -76,21 +72,24 @@ const rowToBranch = (raw: Record<string, unknown>): Branch => {
 export const getBranches = async (): Promise<Branch[]> => {
   const res = await api.get<unknown>(BRANCHES_LIST_PATH);
   const data = res.data;
-  if (!Array.isArray(data) || data.length === 0) return [];
-  if (isBranchRow(data[0])) return data as Branch[];
-  if (isJpUser(data[0])) {
-    return (data as JsonPlaceholderUser[]).slice(0, 12).map(mapJpUserToBranch);
+  const list = isRecord(data) && Array.isArray(data.data) ? data.data : data;
+  if (!Array.isArray(list) || list.length === 0) return [];
+  if (isBranchRow(list[0])) return list as Branch[];
+  if (isBranchApiRow(list[0])) {
+    return (list as BranchApiRow[]).map(mapApiRowToBranch);
   }
-  return data.map((item) => rowToBranch(item as Record<string, unknown>));
+  return list
+    .filter((item): item is Record<string, unknown> => isRecord(item))
+    .map((item) => rowToBranch(item));
 };
 
 export const getBranchById = async (id: string): Promise<Branch | null> => {
   try {
     const res = await api.get<unknown>(branchDetailPath(id));
-    const row = res.data;
+    const row = isRecord(res.data) && isRecord(res.data.data) ? res.data.data : res.data;
     if (row && typeof row === "object") {
       if (isBranchRow(row)) return row;
-      if (isJpUser(row)) return mapJpUserToBranch(row);
+      if (isBranchApiRow(row)) return mapApiRowToBranch(row);
       if (!Array.isArray(row)) return rowToBranch(row as Record<string, unknown>);
     }
     return null;
@@ -99,22 +98,29 @@ export const getBranchById = async (id: string): Promise<Branch | null> => {
   }
 };
 
-const branchToJpBody = (payload: Omit<Branch, "id">) => ({
+const branchToApiBody = (payload: Omit<Branch, "id">) => ({
   name: payload.name,
+  location: payload.location,
+  phoneNumbers: payload.phones,
+  mapUrl: payload.mapUrl,
   email: payload.email,
-  phone: payload.phones.length > 0 ? payload.phones.join(", ") : "—",
-  username: payload.location.slice(0, 20) || "branch",
-  website: payload.mapUrl.replace(/^https?:\/\//, "") || "maps.google.com",
+  status: payload.status,
 });
 
 export const createBranch = async (payload: Omit<Branch, "id">): Promise<Branch> => {
-  const res = await api.post<Record<string, unknown>>(BRANCHES_LIST_PATH, branchToJpBody(payload));
-  const id = res.data.id != null ? String(res.data.id) : Date.now().toString();
+  const res = await api.post<Record<string, unknown>>(BRANCHES_BASE_PATH, branchToApiBody(payload));
+  const row = isRecord(res.data) && isRecord(res.data.data) ? res.data.data : res.data;
+  const id =
+    isRecord(row) && row._id != null
+      ? String(row._id)
+      : isRecord(row) && row.id != null
+        ? String(row.id)
+        : Date.now().toString();
   return { id, ...payload };
 };
 
 export const updateBranchApi = async (id: string, payload: Omit<Branch, "id">): Promise<void> => {
-  await api.put(branchDetailPath(id), { id: Number(id) || id, ...branchToJpBody(payload) });
+  await api.put(branchDetailPath(id), branchToApiBody(payload));
 };
 
 export const deleteBranchApi = async (id: string): Promise<void> => {

@@ -137,7 +137,7 @@ const AlumniPage = () => {
               <div className="flex items-center justify-end gap-2 border-t border-white/10 px-4 py-3">
                 <button
                   type="button"
-                  onClick={() => navigate(`/alumni/edit/${item.id}`)}
+                  onClick={() => navigate(`/alumni/edit/${item.id}`, { state: { alumni: item } })}
                   className="rounded-lg bg-white/10 p-2 text-blue-300 transition-colors hover:bg-white/20"
                   aria-label={`Edit ${item.name}`}
                 >

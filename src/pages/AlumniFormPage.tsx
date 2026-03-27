@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { ArrowLeft, ImagePlus, Loader2 } from "lucide-react";
-import { Link, useNavigate, useParams } from "react-router-dom";
+import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
 
 import PageHeader from "@/components/shared/PageHeader";
 import { Button } from "@/components/ui/button";
@@ -28,7 +28,10 @@ const fileToDataUrl = (file: File): Promise<string> =>
 const AlumniFormPage = () => {
   const { id } = useParams();
   const navigate = useNavigate();
+  const location = useLocation();
   const isEdit = Boolean(id);
+  const stateAlumni = (location.state as { alumni?: Alumni } | null)?.alumni;
+  const canPrefillFromState = Boolean(isEdit && id && stateAlumni && stateAlumni.id === id);
 
   const [form, setForm] = useState(emptyForm);
   const [previewUrl, setPreviewUrl] = useState("");
@@ -39,6 +42,14 @@ const AlumniFormPage = () => {
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
+    if (canPrefillFromState && stateAlumni) {
+      setForm({ name: stateAlumni.name, company: stateAlumni.company, role: stateAlumni.role });
+      setPreviewUrl(stateAlumni.image ?? "");
+      setImageFile(null);
+      setEditLoading(false);
+      return;
+    }
+
     if (!isEdit || !id) return;
 
     const load = async () => {
@@ -61,7 +72,7 @@ const AlumniFormPage = () => {
     };
 
     void load();
-  }, [id, isEdit, navigate]);
+  }, [canPrefillFromState, id, isEdit, navigate, stateAlumni]);
 
   const onImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0] ?? null;

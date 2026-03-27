@@ -30,6 +30,7 @@ const CategoriesPage = () => {
   const [formOpen, setFormOpen] = useState(false);
   const [editing, setEditing] = useState<Category | null>(null);
   const [name, setName] = useState("");
+  const [productCount, setProductCount] = useState("0");
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
@@ -67,26 +68,36 @@ const CategoriesPage = () => {
   const openAdd = () => {
     setEditing(null);
     setName("");
+    setProductCount("0");
     setFormOpen(true);
   };
 
   const openEdit = (c: Category) => {
     setEditing(c);
     setName(c.name);
+    setProductCount(String(c.productCount));
     setFormOpen(true);
   };
 
   const handleSave = async () => {
     if (!name.trim()) return;
+    const parsedProductCount = Number(productCount);
+    const safeProductCount = Number.isFinite(parsedProductCount) && parsedProductCount >= 0
+      ? Math.floor(parsedProductCount)
+      : 0;
     setSaving(true);
     try {
       if (editing) {
-        await updateCategoryApi(editing.id, { name: name.trim(), productCount: editing.productCount });
+        await updateCategoryApi(editing.id, { name: name.trim(), productCount: safeProductCount });
         setCategories((prev) =>
-          prev.map((c) => (c.id === editing.id ? { ...c, name: name.trim() } : c)),
+          prev.map((c) => (
+            c.id === editing.id
+              ? { ...c, name: name.trim(), productCount: safeProductCount }
+              : c
+          )),
         );
       } else {
-        const created = await createCategory({ name: name.trim(), productCount: 0 });
+        const created = await createCategory({ name: name.trim(), productCount: safeProductCount });
         setCategories((prev) => [created, ...prev]);
       }
       setFormOpen(false);
@@ -253,6 +264,15 @@ const CategoriesPage = () => {
           <DialogHeader><DialogTitle>{editing ? "Edit Category" : "Add Category"}</DialogTitle></DialogHeader>
           <div className="space-y-3">
             <div className="flex flex-col gap-1.5"><Label className="text-white/50">Name</Label><Input value={name} onChange={(e) => setName(e.target.value)} /></div>
+            <div className="flex flex-col gap-1.5">
+              <Label className="text-white/50">Product Count</Label>
+              <Input
+                type="number"
+                min={0}
+                value={productCount}
+                onChange={(e) => setProductCount(e.target.value)}
+              />
+            </div>
             <Button disabled={saving} onClick={() => void handleSave()} className="w-full">
               {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
               {editing ? "Update" : "Add"}

@@ -1,4 +1,4 @@
-import { api } from "../client";
+import { api, isApiRequestError } from "../client";
 
 export type GalleryCategory = "Campus" | "Labs" | "Events";
 
@@ -21,17 +21,25 @@ type JsonPlaceholderPhoto = {
   url: string;
 };
 
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === "object" && value !== null;
+
+const isGalleryCategory = (value: unknown): value is GalleryCategory =>
+  value === "Campus" || value === "Labs" || value === "Events";
+
 const isJpPhoto = (x: unknown): x is JsonPlaceholderPhoto =>
-  typeof x === "object" &&
-  x !== null &&
-  typeof (x as JsonPlaceholderPhoto).id === "number" &&
-  typeof (x as JsonPlaceholderPhoto).url === "string";
+  isRecord(x) &&
+  typeof x.id === "number" &&
+  typeof x.url === "string" &&
+  typeof x.title === "string" &&
+  typeof x.albumId === "number";
 
 const isGalleryRow = (x: unknown): x is GalleryItem =>
-  typeof x === "object" &&
-  x !== null &&
-  typeof (x as GalleryItem).id === "string" &&
-  "category" in x;
+  isRecord(x) &&
+  (typeof x.id === "string" || typeof x.id === "number") &&
+  typeof x.title === "string" &&
+  isGalleryCategory(x.category) &&
+  typeof (x.image ?? x.url) === "string";
 
 const albumIdToCategory = (albumId: number): GalleryCategory => {
   const m = albumId % 3;
@@ -48,19 +56,27 @@ const mapPhotoToItem = (p: JsonPlaceholderPhoto): GalleryItem => ({
 });
 
 const rowToGalleryItem = (raw: Record<string, unknown>): GalleryItem => {
-  const cat = raw.category;
-  const category: GalleryCategory =
-    cat === "Campus" || cat === "Labs" || cat === "Events" ? cat : "Campus";
+  const category = isGalleryCategory(raw.category) ? raw.category : "Campus";
   return {
-    id: String(raw.id),
+    id: String(raw.id ?? ""),
     title: String(raw.title ?? ""),
     category,
     image: String(raw.image ?? raw.url ?? ""),
   };
 };
 
+const stableSeed = (input: string): string => {
+  let hash = 0;
+  for (let i = 0; i < input.length; i += 1) {
+    hash = (hash * 31 + input.charCodeAt(i)) >>> 0;
+  }
+  return String(hash || 1);
+};
+
 const remoteUrl = (image: string): string =>
-  image.startsWith("http") ? image : `https://picsum.photos/seed/${Date.now()}/600/400`;
+  image.startsWith("http")
+    ? image
+    : `https://picsum.photos/seed/${stableSeed(image || "gallery-fallback")}/600/400`;
 
 const isBlobUrl = (value: string): boolean => value.startsWith("blob:");
 
@@ -81,8 +97,20 @@ const imageToBase64 = async (image: string): Promise<string> => {
 };
 
 const shouldFallbackToJsonPlaceholder = (err: unknown): boolean => {
-  const msg = err instanceof Error ? err.message : String(err);
-  return msg.includes("status 404");
+  return isApiRequestError(err) && err.status === 404;
+};
+
+const normalizeGalleryItems = (data: unknown): GalleryItem[] => {
+  if (!Array.isArray(data) || data.length === 0) return [];
+  if (data.every((item) => isGalleryRow(item))) {
+    return data;
+  }
+  if (data.every((item) => isJpPhoto(item))) {
+    return data.map(mapPhotoToItem);
+  }
+  return data
+    .filter((item): item is Record<string, unknown> => isRecord(item))
+    .map((item) => (isJpPhoto(item) ? mapPhotoToItem(item) : rowToGalleryItem(item)));
 };
 
 export const getGalleryItems = async (): Promise<GalleryItem[]> => {
@@ -97,13 +125,7 @@ export const getGalleryItems = async (): Promise<GalleryItem[]> => {
     res = await tryGet(JP_FALLBACK_PATH);
   }
 
-  const data = res.data;
-  if (!Array.isArray(data) || data.length === 0) return [];
-  if (isGalleryRow(data[0])) return data as GalleryItem[];
-  if (isJpPhoto(data[0])) {
-    return (data as JsonPlaceholderPhoto[]).map(mapPhotoToItem);
-  }
-  return data.map((item) => rowToGalleryItem(item as Record<string, unknown>));
+  return normalizeGalleryItems(res.data);
 };
 
 export const createGalleryItem = async (
@@ -114,7 +136,7 @@ export const createGalleryItem = async (
   // Backend payload contract (real API):
   // { title, category, image }
   // For dummy JSONPlaceholder we fallback to `/photos`, but we still keep the backend-shaped payload.
-  let res: { data: unknown };
+  let res: { data: Record<string, unknown> };
   try {
     res = await api.post<Record<string, unknown>>(GALLERY_PATH, {
       title: payload.title,
@@ -130,14 +152,15 @@ export const createGalleryItem = async (
     });
   }
 
-  const id = res.data.id != null ? String(res.data.id) : Date.now().toString();
+  const responseData = isRecord(res.data) ? res.data : {};
+  const id = responseData.id != null ? String(responseData.id) : Date.now().toString();
   return {
     id,
     title: payload.title,
     category: payload.category,
     image:
-      typeof res.data.image === "string"
-        ? String(res.data.image)
+      typeof responseData.image === "string"
+        ? String(responseData.image)
         : base64Image
           ? base64Image
           : remoteUrl(payload.image),
