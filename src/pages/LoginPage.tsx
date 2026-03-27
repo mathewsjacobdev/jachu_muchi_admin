@@ -11,26 +11,40 @@ const LoginPage = () => {
   const [password, setPassword] = useState("");
   const [remember, setRemember] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const [errors, setErrors] = useState<{ email?: string; password?: string; general?: string }>({});
   const { login } = useAuth();
   const navigate = useNavigate();
 
   const validate = () => {
     const errs: typeof errors = {};
-    if (!email) errs.email = "Email is required";
-    else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) errs.email = "Invalid email";
+    const trimmedEmail = email.trim();
+    if (!trimmedEmail) errs.email = "Email is required";
+    else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmedEmail)) errs.email = "Invalid email";
     if (!password) errs.password = "Password is required";
     else if (password.length < 6) errs.password = "Min 6 characters";
     return errs;
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (isSubmitting) return;
     const errs = validate();
     if (Object.keys(errs).length) { setErrors(errs); return; }
-    const ok = login(email, password);
-    if (ok) navigate("/");
-    else setErrors({ general: "Invalid credentials" });
+    setErrors({});
+    setIsSubmitting(true);
+    try {
+      const ok = await login(email.trim(), password);
+      if (ok) {
+        navigate("/");
+      } else {
+        setErrors({ general: "Invalid credentials" });
+      }
+    } catch {
+      setErrors({ general: "Unable to sign in right now. Please try again." });
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -105,9 +119,10 @@ const LoginPage = () => {
 
               <Button
                 type="submit"
+                disabled={isSubmitting}
                 className="h-12 w-full rounded-xl bg-blue-600 text-white shadow-sm hover:bg-blue-700"
               >
-                Sign in
+                {isSubmitting ? "Signing in..." : "Sign in"}
               </Button>
             </form>
           </div>

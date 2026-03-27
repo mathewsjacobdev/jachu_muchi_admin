@@ -41,13 +41,20 @@ const GalleryPage = () => {
   });
   const [previewImage, setPreviewImage] = useState("");
   const [saving, setSaving] = useState(false);
+  const [loadError, setLoadError] = useState("");
+  const [formError, setFormError] = useState("");
+  const [deleteError, setDeleteError] = useState("");
+  const [deletingIds, setDeletingIds] = useState<Set<string>>(new Set());
+
+  const MAX_IMAGE_SIZE_BYTES = 2 * 1024 * 1024;
 
   const load = async () => {
     setIsLoading(true);
+    setLoadError("");
     try {
       setItems(await getGalleryItems());
     } catch (e) {
-      console.error(e);
+      setLoadError(e instanceof Error ? e.message : "Failed to load gallery items.");
     } finally {
       setIsLoading(false);
     }
@@ -91,23 +98,51 @@ const GalleryPage = () => {
       imageFile: null,
     });
     setPreviewImage("");
+    setFormError("");
     setFormOpen(true);
   };
 
   const onImageChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0] ?? null;
-    if (!file || !file.type.startsWith("image/")) return;
+    if (!file) {
+      setForm((prev) => ({ ...prev, imageFile: null }));
+      setPreviewImage("");
+      return;
+    }
+    if (!file.type.startsWith("image/")) {
+      setFormError("Please select a valid image file.");
+      return;
+    }
+    if (file.size > MAX_IMAGE_SIZE_BYTES) {
+      setFormError("Image size must be 2MB or less.");
+      return;
+    }
 
     if (previewImage.startsWith("blob:")) {
       URL.revokeObjectURL(previewImage);
     }
 
+    setFormError("");
     setForm((prev) => ({ ...prev, imageFile: file }));
     setPreviewImage(URL.createObjectURL(file));
   };
 
   const handleSave = async () => {
-    if (!form.title.trim() || !previewImage || !form.imageFile) return;
+    if (saving) return;
+    if (!form.title.trim()) {
+      setFormError("Title is required.");
+      return;
+    }
+    if (!previewImage || !form.imageFile) {
+      setFormError("Image is required.");
+      return;
+    }
+    if (form.imageFile.size > MAX_IMAGE_SIZE_BYTES) {
+      setFormError("Image size must be 2MB or less.");
+      return;
+    }
+
+    setFormError("");
     setSaving(true);
     try {
       const created = await createGalleryItem({
@@ -118,19 +153,32 @@ const GalleryPage = () => {
       setItems((prev) => [created, ...prev]);
       setFormOpen(false);
     } catch (e) {
-      console.error(e);
+      setFormError(e instanceof Error ? e.message : "Failed to save image. Please try again.");
     } finally {
       setSaving(false);
     }
   };
 
   const removeItem = async (itemId: string) => {
+    if (deletingIds.has(itemId)) return;
+    setDeleteError("");
+    setDeletingIds((prev) => {
+      const next = new Set(prev);
+      next.add(itemId);
+      return next;
+    });
     setItems((prev) => prev.filter((x) => x.id !== itemId));
     try {
       await deleteGalleryItemApi(itemId);
     } catch (e) {
-      console.error(e);
+      setDeleteError(e instanceof Error ? e.message : "Failed to delete image.");
       void load();
+    } finally {
+      setDeletingIds((prev) => {
+        const next = new Set(prev);
+        next.delete(itemId);
+        return next;
+      });
     }
   };
 
@@ -146,6 +194,8 @@ const GalleryPage = () => {
           </Button>
         )}
       />
+      {loadError ? <p className="text-sm text-red-400">{loadError}</p> : null}
+      {deleteError ? <p className="text-sm text-red-400">{deleteError}</p> : null}
 
       <div className="rounded-xl border border-white/10 bg-white/5 p-3 shadow-lg backdrop-blur-xl transition-all duration-300 hover:scale-[1.02] hover:shadow-2xl sm:p-4 md:p-5">
         <div className="flex flex-wrap items-center gap-2">
@@ -211,9 +261,14 @@ const GalleryPage = () => {
                   <button
                     type="button"
                     onClick={() => void removeItem(item.id)}
+                    disabled={deletingIds.has(item.id)}
                     className="rounded-lg p-2 text-red-400 transition-all duration-200 hover:scale-[1.02] hover:bg-white/10"
                   >
-                    <Trash2 className="h-4 w-4" />
+                    {deletingIds.has(item.id) ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <Trash2 className="h-4 w-4" />
+                    )}
                   </button>
                 </div>
               </div>
@@ -331,6 +386,7 @@ const GalleryPage = () => {
                 <img src={previewImage} alt="Preview" className="h-44 w-full rounded-lg object-cover" />
               ) : null}
             </div>
+            {formError ? <p className="text-sm text-red-300">{formError}</p> : null}
 
             <div className="space-y-1.5">
               <Label>Title</Label>

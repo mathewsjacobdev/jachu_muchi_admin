@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Link, useNavigate, useParams } from "react-router-dom";
+import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
 import { ArrowLeft, Loader2, Plus, X } from "lucide-react";
 
 import PageHeader from "@/components/shared/PageHeader";
@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import type { BranchStatus } from "@/lib/branch-store";
+import type { Branch, BranchStatus } from "@/lib/branch-store";
 import { createBranch, getBranchById, updateBranchApi } from "@/api/services/branch.service";
 
 const emptyForm = {
@@ -21,7 +21,10 @@ const emptyForm = {
 const BranchFormPage = () => {
   const { id } = useParams();
   const navigate = useNavigate();
+  const location = useLocation();
   const isEdit = Boolean(id);
+  const stateBranch = (location.state as { branch?: Branch } | null)?.branch;
+  const canPrefillFromState = Boolean(isEdit && id && stateBranch && stateBranch.id === id);
 
   const [form, setForm] = useState(emptyForm);
   const [phones, setPhones] = useState<string[]>([""]);
@@ -30,6 +33,19 @@ const BranchFormPage = () => {
   const [editLoading, setEditLoading] = useState(isEdit);
 
   useEffect(() => {
+    if (canPrefillFromState && stateBranch) {
+      setForm({
+        name: stateBranch.name,
+        email: stateBranch.email,
+        location: stateBranch.location,
+        mapUrl: stateBranch.mapUrl,
+        status: stateBranch.status,
+      });
+      setPhones(stateBranch.phones.length > 0 ? [...stateBranch.phones] : [""]);
+      setEditLoading(false);
+      return;
+    }
+
     if (!isEdit || !id) return;
 
     const load = async () => {
@@ -58,7 +74,7 @@ const BranchFormPage = () => {
     };
 
     void load();
-  }, [id, isEdit, navigate]);
+  }, [canPrefillFromState, id, isEdit, navigate, stateBranch]);
 
   const updatePhone = (index: number, value: string) => {
     setPhones((prev) => prev.map((p, i) => (i === index ? value : p)));

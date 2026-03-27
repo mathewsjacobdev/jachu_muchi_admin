@@ -169,7 +169,7 @@ const BranchesPage = () => {
                 <div className="flex items-center gap-2">
                   <button
                     type="button"
-                    onClick={() => navigate(`/branches/edit/${branch.id}`)}
+                    onClick={() => navigate(`/branches/edit/${branch.id}`, { state: { branch } })}
                     className="rounded-lg bg-white/10 p-2 text-blue-300 transition-colors hover:bg-white/20"
                     aria-label={`Edit ${branch.name}`}
                   >

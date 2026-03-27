@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Link, useNavigate, useParams } from "react-router-dom";
+import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
 import { ArrowLeft, Clock, Loader2, X } from "lucide-react";
 
 import PageHeader from "@/components/shared/PageHeader";
@@ -11,6 +11,7 @@ import {
   createCourse,
   getCourse,
   updateCourse,
+  type CourseListItem,
   type CoursePayload,
 } from "@/api/services/course.service";
 
@@ -33,10 +34,17 @@ const courseTypeOptions = [
   "Postgraduate Medical Training",
 ] as const;
 
+type EditLocationState = {
+  course?: CourseListItem;
+};
+
 const CourseFormPage = () => {
   const { id } = useParams();
   const navigate = useNavigate();
+  const location = useLocation();
   const isEdit = Boolean(id);
+  const stateCourse = (location.state as EditLocationState | null)?.course;
+  const canPrefillFromState = Boolean(isEdit && id && stateCourse && stateCourse.id === id);
 
   const [form, setForm] = useState(emptyForm);
   const [imageFile, setImageFile] = useState<File | null>(null);
@@ -47,6 +55,20 @@ const CourseFormPage = () => {
   const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
+    if (canPrefillFromState && stateCourse) {
+      setForm({
+        courseName: stateCourse.courseName,
+        type: stateCourse.type,
+        duration: stateCourse.duration,
+        eligibility: stateCourse.eligibility,
+        keyDetails: stateCourse.keyDetails,
+      });
+      setPreviewUrl(stateCourse.image || "");
+      setImageFile(null);
+      setEditLoading(false);
+      return;
+    }
+
     if (!isEdit || !id) return;
 
     const controller = new AbortController();
@@ -78,7 +100,7 @@ const CourseFormPage = () => {
       cancelled = true;
       controller.abort();
     };
-  }, [id, isEdit]);
+  }, [canPrefillFromState, id, isEdit, stateCourse]);
 
   useEffect(() => () => {
     if (previewUrl.startsWith("blob:")) {
@@ -121,12 +143,13 @@ const CourseFormPage = () => {
       if (isEdit && !id) return;
 
       const payload: CoursePayload = {
-        title: form.courseName,
-        body: form.keyDetails,
+        courseName: form.courseName,
+        keyDetails: form.keyDetails,
         duration: form.duration,
         eligibility: form.eligibility,
         type: form.type,
-        image: previewUrl,
+        imageUrl: previewUrl,
+        imageFile,
       };
 
       setSubmitting(true);
@@ -143,7 +166,7 @@ const CourseFormPage = () => {
         setSubmitting(false);
       }
     },
-    [form.courseName, form.duration, form.eligibility, form.keyDetails, form.type, id, isEdit, navigate, previewUrl],
+    [form.courseName, form.duration, form.eligibility, form.keyDetails, form.type, id, imageFile, isEdit, navigate, previewUrl],
   );
 
   const durationLabel = useMemo(
