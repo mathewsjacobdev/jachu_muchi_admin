@@ -1,5 +1,5 @@
 import { useCallback, useDeferredValue, useEffect, useMemo, useState } from "react";
-import { Eye, Loader2, Search, Trash2 } from "lucide-react";
+import { ChevronLeft, ChevronRight, Eye, Loader2, Search, Trash2 } from "lucide-react";
 import { Link } from "react-router-dom";
 import PageHeader from "@/components/shared/PageHeader";
 import DeleteModal from "@/components/shared/DeleteModal";
@@ -7,9 +7,12 @@ import { ResponsiveTable, type ResponsiveTableColumn } from "@/components/ui/Res
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import {
   deleteEnquiry,
-  getEnquiries,
+  getEnquiriesFilter,
   type Enquiry,
+  type EnquiryFilterOrder,
+  type EnquiryFilterSortBy,
   type EnquiryStatus,
+  type EnquiryType,
   updateEnquiryStatus,
 } from "@/api/services/enquiry.service";
 
@@ -21,6 +24,24 @@ const STATUS_OPTIONS: EnquiryStatus[] = [
   "Closed",
 ];
 
+const SORT_BY_OPTIONS: { value: EnquiryFilterSortBy; label: string }[] = [
+  { value: "date", label: "Date" },
+  { value: "name", label: "Name" },
+];
+
+const ORDER_OPTIONS: { value: EnquiryFilterOrder; label: string }[] = [
+  { value: "asc", label: "Ascending" },
+  { value: "desc", label: "Descending" },
+];
+
+const TYPE_FILTER_OPTIONS: { value: "All" | EnquiryType; label: string }[] = [
+  { value: "All", label: "All types" },
+  { value: "Normal Enquiry", label: "Normal enquiry" },
+  { value: "Course Enquiry", label: "Course enquiry" },
+];
+
+const PAGE_SIZE = 10;
+
 const statusClasses: Record<EnquiryStatus, string> = {
   New: "border border-blue-400/20 bg-blue-400/10 text-blue-300",
   Contacted: "border border-orange-400/20 bg-orange-400/10 text-orange-300",
@@ -29,67 +50,79 @@ const statusClasses: Record<EnquiryStatus, string> = {
   Closed: "border border-red-400/20 bg-red-400/10 text-red-300",
 };
 
+const formatEnquiryDate = (value: string) => {
+  if (!value?.trim()) return "—";
+  const d = new Date(value);
+  return Number.isNaN(d.getTime()) ? value : d.toLocaleDateString(undefined, { dateStyle: "medium" });
+};
+
+const selectTriggerClass =
+  "h-10 w-full rounded-lg border border-white/20 bg-white/10 text-white backdrop-blur-lg hover:bg-white/10 data-[placeholder]:text-gray-300";
+
 const EnquiriesPage = () => {
   const [enquiries, setEnquiries] = useState<Enquiry[]>([]);
+  const [total, setTotal] = useState(0);
+  const [page, setPage] = useState(1);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<"All" | EnquiryStatus>("All");
+  const [typeFilter, setTypeFilter] = useState<"All" | EnquiryType>("All");
+  const [sortBy, setSortBy] = useState<EnquiryFilterSortBy>("date");
+  const [order, setOrder] = useState<EnquiryFilterOrder>("desc");
   const [isLoading, setIsLoading] = useState(true);
-  const [deleteId, setDeleteId] = useState<number | null>(null);
+  const [deleteId, setDeleteId] = useState<string | null>(null);
 
-  const deferredSearch = useDeferredValue(search.trim().toLowerCase());
+  const deferredSearch = useDeferredValue(search.trim());
 
-  useEffect(() => {
-    const fetchList = async () => {
-      setIsLoading(true);
-      try {
-        const data = await getEnquiries();
-        setEnquiries(data);
-      } catch (err) {
-        console.error(err);
-      } finally {
-        setIsLoading(false);
-      }
-    };
-    void fetchList();
-  }, []);
-
-  const filteredEnquiries = useMemo(() => {
-    const query = deferredSearch;
-
-    return enquiries.filter((enquiry) => {
-      const matchesSearch =
-        !query ||
-        enquiry.name.toLowerCase().includes(query) ||
-        enquiry.phone.toLowerCase().includes(query) ||
-        enquiry.email.toLowerCase().includes(query) ||
-        enquiry.course.toLowerCase().includes(query) ||
-        enquiry.message.toLowerCase().includes(query);
-
-      const matchesStatus =
-        statusFilter === "All" ? true : enquiry.status === statusFilter;
-
-      return matchesSearch && matchesStatus;
-    });
-  }, [enquiries, deferredSearch, statusFilter]);
-
-  const handleStatusChange = useCallback(async (enquiryId: number, nextStatus: EnquiryStatus) => {
-    setEnquiries((prev) =>
-      prev.map((enquiry) =>
-        enquiry.id === enquiryId ? { ...enquiry, status: nextStatus } : enquiry,
-      ),
-    );
+  const loadEnquiries = useCallback(async () => {
+    setIsLoading(true);
     try {
-      await updateEnquiryStatus(enquiryId, nextStatus);
+      const result = await getEnquiriesFilter({
+        page,
+        limit: PAGE_SIZE,
+        search: deferredSearch || undefined,
+        status: statusFilter,
+        type: typeFilter,
+        sortBy,
+        order,
+      });
+      setEnquiries(result.data);
+      setTotal(result.total);
     } catch (err) {
       console.error(err);
-      try {
-        const data = await getEnquiries();
-        setEnquiries(data);
-      } catch (refetchErr) {
-        console.error(refetchErr);
-      }
+      setEnquiries([]);
+      setTotal(0);
+    } finally {
+      setIsLoading(false);
     }
-  }, []);
+  }, [page, deferredSearch, statusFilter, typeFilter, sortBy, order]);
+
+  useEffect(() => {
+    void loadEnquiries();
+  }, [loadEnquiries]);
+
+  useEffect(() => {
+    setPage(1);
+  }, [deferredSearch]);
+
+  const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+  const rangeStart = total === 0 ? 0 : (page - 1) * PAGE_SIZE + 1;
+  const rangeEnd = Math.min(page * PAGE_SIZE, total);
+
+  const handleStatusChange = useCallback(
+    async (enquiryId: string, nextStatus: EnquiryStatus) => {
+      setEnquiries((prev) =>
+        prev.map((enquiry) => (enquiry.id === enquiryId ? { ...enquiry, status: nextStatus } : enquiry)),
+      );
+      try {
+        await updateEnquiryStatus(enquiryId, nextStatus);
+        await loadEnquiries();
+      } catch (err) {
+        console.error(err);
+        await loadEnquiries();
+      }
+    },
+    [loadEnquiries],
+  );
 
   const handleDeleteConfirm = useCallback(async () => {
     if (deleteId === null) return;
@@ -97,17 +130,12 @@ const EnquiriesPage = () => {
     setDeleteId(null);
     try {
       await deleteEnquiry(id);
-      setEnquiries((prev) => prev.filter((enquiry) => enquiry.id !== id));
+      await loadEnquiries();
     } catch (err) {
       console.error(err);
-      try {
-        const data = await getEnquiries();
-        setEnquiries(data);
-      } catch (refetchErr) {
-        console.error(refetchErr);
-      }
+      await loadEnquiries();
     }
-  }, [deleteId]);
+  }, [deleteId, loadEnquiries]);
 
   const columns = useMemo((): ResponsiveTableColumn<Enquiry>[] => [
     {
@@ -123,13 +151,15 @@ const EnquiriesPage = () => {
     {
       key: "type",
       header: "Type",
-      render: (e) => (e.type === "course" ? "Course Enquiry" : "Normal Enquiry"),
-      renderMobile: (e) => (e.type === "course" ? "Course Enquiry" : "Normal Enquiry"),
+      render: (e) => e.type,
+      renderMobile: (e) => e.type,
       cellClassName: "text-sm text-gray-400",
     },
     {
       key: "date",
       header: "Date",
+      render: (e) => formatEnquiryDate(e.date),
+      renderMobile: (e) => formatEnquiryDate(e.date),
       cellClassName: "text-sm text-gray-400",
     },
     {
@@ -154,7 +184,11 @@ const EnquiriesPage = () => {
             </SelectTrigger>
             <SelectContent className="border border-white/10 bg-slate-900 text-white">
               {STATUS_OPTIONS.map((status) => (
-                <SelectItem key={status} className="focus:bg-white/10 focus:text-white data-[state=checked]:bg-blue-500/20 data-[state=checked]:text-blue-200" value={status}>
+                <SelectItem
+                  key={status}
+                  className="focus:bg-white/10 focus:text-white data-[state=checked]:bg-blue-500/20 data-[state=checked]:text-blue-200"
+                  value={status}
+                >
                   {status}
                 </SelectItem>
               ))}
@@ -203,33 +237,125 @@ const EnquiriesPage = () => {
       />
 
       <div className="rounded-xl border border-white/20 bg-white/10 p-3 shadow-lg backdrop-blur-lg transition-all duration-300 hover:scale-[1.02] hover:shadow-2xl sm:p-4 md:p-5">
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
+        <div className="flex flex-col gap-3">
           <div className="relative w-full sm:max-w-md">
             <Search className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-300" />
             <input
               type="search"
               value={search}
               onChange={(event) => setSearch(event.target.value)}
-              placeholder="Search by name, phone, email, course or message..."
+              placeholder="Search by name, phone, email, type or message..."
               autoComplete="off"
               className="h-10 w-full rounded-lg border border-white/20 bg-white/10 pl-11 pr-4 text-sm text-gray-100 shadow-sm backdrop-blur-lg transition-all duration-200 placeholder:text-gray-400 hover:bg-white/15 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
             />
           </div>
 
-          <div className="w-full sm:w-52">
-            <Select value={statusFilter} onValueChange={(value) => setStatusFilter(value as "All" | EnquiryStatus)}>
-              <SelectTrigger className="h-10 w-full rounded-lg border border-white/20 bg-white/10 text-white backdrop-blur-lg hover:bg-white/10 data-[placeholder]:text-gray-300">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent className="border border-white/10 bg-slate-900 text-white">
-                <SelectItem className="focus:bg-white/10 focus:text-white data-[state=checked]:bg-blue-500/20 data-[state=checked]:text-blue-200" value="All">All Status</SelectItem>
-                {STATUS_OPTIONS.map((status) => (
-                  <SelectItem key={status} className="focus:bg-white/10 focus:text-white data-[state=checked]:bg-blue-500/20 data-[state=checked]:text-blue-200" value={status}>
-                    {status}
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
+            <div className="w-full min-w-0">
+              <Select
+                value={statusFilter}
+                onValueChange={(value) => {
+                  setPage(1);
+                  setStatusFilter(value as "All" | EnquiryStatus);
+                }}
+              >
+                <SelectTrigger className={selectTriggerClass}>
+                  <SelectValue placeholder="Status" />
+                </SelectTrigger>
+                <SelectContent className="border border-white/10 bg-slate-900 text-white">
+                  <SelectItem
+                    className="focus:bg-white/10 focus:text-white data-[state=checked]:bg-blue-500/20 data-[state=checked]:text-blue-200"
+                    value="All"
+                  >
+                    All Status
                   </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+                  {STATUS_OPTIONS.map((status) => (
+                    <SelectItem
+                      key={status}
+                      className="focus:bg-white/10 focus:text-white data-[state=checked]:bg-blue-500/20 data-[state=checked]:text-blue-200"
+                      value={status}
+                    >
+                      {status}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="w-full min-w-0">
+              <Select
+                value={typeFilter}
+                onValueChange={(value) => {
+                  setPage(1);
+                  setTypeFilter(value as "All" | EnquiryType);
+                }}
+              >
+                <SelectTrigger className={selectTriggerClass}>
+                  <SelectValue placeholder="Type" />
+                </SelectTrigger>
+                <SelectContent className="border border-white/10 bg-slate-900 text-white">
+                  {TYPE_FILTER_OPTIONS.map((opt) => (
+                    <SelectItem
+                      key={opt.value}
+                      className="focus:bg-white/10 focus:text-white data-[state=checked]:bg-blue-500/20 data-[state=checked]:text-blue-200"
+                      value={opt.value}
+                    >
+                      {opt.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="w-full min-w-0">
+              <Select
+                value={sortBy}
+                onValueChange={(value) => {
+                  setPage(1);
+                  setSortBy(value as EnquiryFilterSortBy);
+                }}
+              >
+                <SelectTrigger className={selectTriggerClass}>
+                  <SelectValue placeholder="Sort by" />
+                </SelectTrigger>
+                <SelectContent className="border border-white/10 bg-slate-900 text-white">
+                  {SORT_BY_OPTIONS.map((opt) => (
+                    <SelectItem
+                      key={opt.value}
+                      className="focus:bg-white/10 focus:text-white data-[state=checked]:bg-blue-500/20 data-[state=checked]:text-blue-200"
+                      value={opt.value}
+                    >
+                      {opt.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="w-full min-w-0">
+              <Select
+                value={order}
+                onValueChange={(value) => {
+                  setPage(1);
+                  setOrder(value as EnquiryFilterOrder);
+                }}
+              >
+                <SelectTrigger className={selectTriggerClass}>
+                  <SelectValue placeholder="Order" />
+                </SelectTrigger>
+                <SelectContent className="border border-white/10 bg-slate-900 text-white">
+                  {ORDER_OPTIONS.map((opt) => (
+                    <SelectItem
+                      key={opt.value}
+                      className="focus:bg-white/10 focus:text-white data-[state=checked]:bg-blue-500/20 data-[state=checked]:text-blue-200"
+                      value={opt.value}
+                    >
+                      {opt.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
           </div>
         </div>
       </div>
@@ -252,7 +378,7 @@ const EnquiriesPage = () => {
             </div>
           </div>
         </>
-      ) : filteredEnquiries.length === 0 ? (
+      ) : enquiries.length === 0 ? (
         <>
           <div className="hidden md:block p-8 text-center text-sm text-white/50">
             No enquiries found
@@ -260,16 +386,51 @@ const EnquiriesPage = () => {
           <div className="md:hidden mx-auto max-w-sm rounded-xl border border-dashed border-white/20 bg-white/10 p-4 text-center backdrop-blur-lg shadow-md">
             <p className="text-sm font-semibold text-gray-100">No enquiries found</p>
             <p className="mt-1.5 text-xs text-gray-300">
-              Try changing your search term or status filter.
+              Try changing your search term or filters.
             </p>
           </div>
         </>
       ) : (
         <ResponsiveTable
-          data={filteredEnquiries}
+          data={enquiries}
           columns={columns}
           renderActions={renderActions}
         />
+      )}
+
+      {!isLoading && total > 0 && (
+        <div className="flex flex-col items-stretch justify-between gap-3 rounded-xl border border-white/20 bg-white/10 px-4 py-3 backdrop-blur-lg sm:flex-row sm:items-center">
+          <p className="text-center text-sm text-gray-300 sm:text-left">
+            Showing <span className="font-semibold text-gray-100">{rangeStart}</span>
+            {" – "}
+            <span className="font-semibold text-gray-100">{rangeEnd}</span>
+            {" of "}
+            <span className="font-semibold text-gray-100">{total}</span>
+          </p>
+          <div className="flex items-center justify-center gap-2">
+            <button
+              type="button"
+              disabled={page <= 1}
+              onClick={() => setPage((p) => Math.max(1, p - 1))}
+              className="inline-flex h-9 items-center gap-1 rounded-lg border border-white/20 bg-white/10 px-3 text-sm font-medium text-white transition-colors hover:bg-white/15 disabled:pointer-events-none disabled:opacity-40"
+            >
+              <ChevronLeft className="h-4 w-4" aria-hidden />
+              Previous
+            </button>
+            <span className="min-w-[7rem] text-center text-sm text-gray-300">
+              Page {page} of {totalPages}
+            </span>
+            <button
+              type="button"
+              disabled={page >= totalPages}
+              onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+              className="inline-flex h-9 items-center gap-1 rounded-lg border border-white/20 bg-white/10 px-3 text-sm font-medium text-white transition-colors hover:bg-white/15 disabled:pointer-events-none disabled:opacity-40"
+            >
+              Next
+              <ChevronRight className="h-4 w-4" aria-hidden />
+            </button>
+          </div>
+        </div>
       )}
 
       <DeleteModal

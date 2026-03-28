@@ -8,7 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import type { BannerItem, BannerStatus } from "@/lib/banner-store";
-import { updateBannerApi } from "@/api/services/banner.service";
+import { getBannerById, updateBannerApi } from "@/api/services/banner.service";
 
 const fileToDataUrl = (file: File): Promise<string> =>
   new Promise((resolve, reject) => {
@@ -47,16 +47,35 @@ const EditBannerPage = () => {
       typeof state.image === "string" &&
       (state.status === "Active" || state.status === "Inactive");
 
-    if (!isValidState) {
-      navigate("/banners");
+    if (isValidState) {
+      setTitle(state.title);
+      setStatus(state.status);
+      setPreviewUrl(state.image);
+      setEditLoading(false);
+      setLoadError("");
       return;
     }
 
-    setTitle(state.title);
-    setStatus(state.status);
-    setPreviewUrl(state.image);
-    setEditLoading(false);
-    setLoadError("");
+    const loadBanner = async () => {
+      setEditLoading(true);
+      try {
+        const existing = await getBannerById(id);
+        if (!existing) {
+          navigate("/banners");
+          return;
+        }
+        setTitle(existing.title);
+        setStatus(existing.status);
+        setPreviewUrl(existing.image);
+        setLoadError("");
+      } catch {
+        setLoadError("Could not load banner.");
+      } finally {
+        setEditLoading(false);
+      }
+    };
+
+    void loadBanner();
   }, [id, location.state, navigate]);
 
   const onImageChange = (event: React.ChangeEvent<HTMLInputElement>) => {

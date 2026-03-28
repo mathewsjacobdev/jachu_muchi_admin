@@ -42,6 +42,7 @@ const emptyForm = {
   email: "",
   role: "Sub Admin" as ManagedUserRole,
   status: "Active" as ManagedUserStatus,
+  password: "",
 };
 
 const UsersPage = () => {
@@ -51,6 +52,7 @@ const UsersPage = () => {
   const [formOpen, setFormOpen] = useState(false);
   const [editing, setEditing] = useState<ManagedUser | null>(null);
   const [form, setForm] = useState(emptyForm);
+  const [formError, setFormError] = useState("");
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
@@ -96,6 +98,7 @@ const UsersPage = () => {
   const openAdd = () => {
     setEditing(null);
     setForm(emptyForm);
+    setFormError("");
     setFormOpen(true);
   };
 
@@ -106,12 +109,23 @@ const UsersPage = () => {
       email: user.email,
       role: user.role,
       status: user.status,
+      password: "",
     });
+    setFormError("");
     setFormOpen(true);
   };
 
   const handleSave = async () => {
     if (!form.name.trim() || !form.email.trim()) return;
+    if (!editing && !form.password.trim()) {
+      setFormError("Password is required.");
+      return;
+    }
+    if (form.password.trim() && form.password.trim().length < 6) {
+      setFormError("Password must be at least 6 characters.");
+      return;
+    }
+    setFormError("");
     setSaving(true);
     try {
       if (editing) {
@@ -425,6 +439,15 @@ const UsersPage = () => {
                 </Select>
               </div>
             </div>
+            <div className="flex flex-col gap-1.5">
+              <Label className="text-white/80">{editing ? "Password (optional)" : "Password"}</Label>
+              <Input
+                type="password"
+                value={form.password}
+                onChange={(e) => setForm({ ...form, password: e.target.value })}
+              />
+            </div>
+            {formError ? <p className="text-xs text-red-400">{formError}</p> : null}
             <Button disabled={saving} onClick={() => void handleSave()} className="w-full">
               {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
               {editing ? "Update" : "Add"} User

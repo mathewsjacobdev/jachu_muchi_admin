@@ -200,7 +200,10 @@ const SettingsPage = () => {
         adminEmail: adminEmail.trim(),
         notificationEmails: notificationEmails.map((e) => e.trim()).filter(Boolean),
         ...(editPasswordMode && newPassword.trim()
-          ? { newPassword: newPassword.trim() }
+          ? {
+              newPassword: newPassword.trim(),
+              confirmNewPassword: confirmPassword.trim(),
+            }
           : {}),
       });
 

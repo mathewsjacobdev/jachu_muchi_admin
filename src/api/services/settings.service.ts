@@ -1,12 +1,7 @@
 import { api } from "../client";
 
-/**
- * Dummy API support:
- * JSONPlaceholder does not have `/settings`, so we use a stable existing resource.
- * Swap paths when your real backend is ready.
- */
-export const SETTINGS_GET_PATH = "/users/1";
-export const SETTINGS_SAVE_PATH = "/users/1";
+export const SETTINGS_GET_PATH = "/settings";
+export const SETTINGS_SAVE_PATH = "/settings";
 
 export interface AdminSettings {
   whatsAppNumber: string;
@@ -17,6 +12,7 @@ export interface AdminSettings {
 export type SaveSettingsInput = AdminSettings & {
   currentPassword?: string;
   newPassword?: string;
+  confirmNewPassword?: string;
 };
 
 export interface SettingsSavePayload {
@@ -25,6 +21,7 @@ export interface SettingsSavePayload {
   notificationEmails: string[];
   currentPassword?: string;
   newPassword?: string;
+  confirmNewPassword?: string;
 }
 
 export const defaultAdminSettings: AdminSettings = {
@@ -54,7 +51,6 @@ const parseEmailsFromUsername = (username: unknown): string[] => {
 };
 
 const parseSettingsResponse = (raw: Record<string, unknown>): AdminSettings => {
-  // 1) Real backend (camelCase)
   if (
     "whatsAppNumber" in raw &&
     "adminEmail" in raw &&
@@ -67,30 +63,15 @@ const parseSettingsResponse = (raw: Record<string, unknown>): AdminSettings => {
     };
   }
 
-  // 2) Real backend (snake_case)
-  if (
-    "Wp_number" in raw &&
-    "Admin_email" in raw &&
-    Array.isArray(raw.Notification_emails)
-  ) {
-    return {
-      whatsAppNumber: String(raw.Wp_number),
-      adminEmail: String(raw.Admin_email),
-      notificationEmails: toStringArray(raw.Notification_emails),
-    };
-  }
-
-  // 3) JSONPlaceholder dummy (phone/email/username)
+  // Fallback: attempt to adapt slightly different shapes, otherwise use defaults.
   const notificationEmails =
-    toStringArray(raw.notificationEmails).length
+    toStringArray(raw.notificationEmails).length > 0
       ? toStringArray(raw.notificationEmails)
-      : toStringArray(raw.Notification_emails).length
-        ? toStringArray(raw.Notification_emails)
-        : parseEmailsFromUsername(raw.username);
+      : parseEmailsFromUsername(raw.username);
 
   return {
-    whatsAppNumber: String(raw.phone ?? raw.Wp_number ?? raw.whatsAppNumber ?? defaultAdminSettings.whatsAppNumber),
-    adminEmail: String(raw.email ?? raw.Admin_email ?? raw.adminEmail ?? defaultAdminSettings.adminEmail),
+    whatsAppNumber: String(raw.whatsAppNumber ?? defaultAdminSettings.whatsAppNumber),
+    adminEmail: String(raw.adminEmail ?? defaultAdminSettings.adminEmail),
     notificationEmails: notificationEmails.length
       ? notificationEmails
       : [...defaultAdminSettings.notificationEmails],
@@ -103,7 +84,6 @@ const parseSettingsResponse = (raw: Record<string, unknown>): AdminSettings => {
  */
 export const toSettingsSavePayload = (
   payload: SaveSettingsInput,
-  includeDummyFields: boolean,
 ): SettingsSavePayload & Record<string, unknown> => {
   const notificationEmails = payload.notificationEmails.map((e) => e.trim()).filter(Boolean);
 
@@ -115,13 +95,7 @@ export const toSettingsSavePayload = (
 
   if (payload.currentPassword?.trim()) body.currentPassword = payload.currentPassword.trim();
   if (payload.newPassword?.trim()) body.newPassword = payload.newPassword.trim();
-
-  // JSONPlaceholder dummy: keep compatibility so next GET shows updates.
-  if (includeDummyFields) {
-    body.phone = payload.whatsAppNumber.trim();
-    body.email = payload.adminEmail.trim();
-    body.username = notificationEmails.join(",");
-  }
+  if (payload.confirmNewPassword?.trim()) body.confirmNewPassword = payload.confirmNewPassword.trim();
 
   return body;
 };
@@ -132,7 +106,11 @@ export const getSettings = async (signal?: AbortSignal): Promise<AdminSettings> 
     signal ? { signal } : undefined,
   );
 
-  const data = res.data;
+  const root = res.data;
+  const data =
+    isRecord(root) && isRecord(root.data)
+      ? root.data
+      : root;
   if (isRecord(data)) return parseSettingsResponse(data);
 
   console.warn(
@@ -143,21 +121,7 @@ export const getSettings = async (signal?: AbortSignal): Promise<AdminSettings> 
 };
 
 export const saveSettings = async (payload: SaveSettingsInput): Promise<void> => {
-  // Detect dummy vs real backend by looking at GET shape.
-  // - Real backend GET: { Wp_number, Admin_email, Notification_emails }
-  // - JSONPlaceholder dummy GET: { phone, email, username, ... }
-  const current = await api.get<unknown>(SETTINGS_GET_PATH);
-  const raw = current.data;
-
-  const looksLikeRealBackend =
-    isRecord(raw) &&
-    "Wp_number" in raw &&
-    "Admin_email" in raw &&
-    Array.isArray((raw as Record<string, unknown>).Notification_emails);
-
-  const includeDummyFields = !looksLikeRealBackend;
-
-  await api.put(SETTINGS_SAVE_PATH, toSettingsSavePayload(payload, includeDummyFields));
+  await api.put(SETTINGS_SAVE_PATH, toSettingsSavePayload(payload));
 };
 
 /** @deprecated Use `saveSettings` */
