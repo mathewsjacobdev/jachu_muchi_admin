@@ -212,7 +212,7 @@ const ProductsPage = () => {
             />
           </div>
         </div>
-
+{/* 
         <div className="flex w-full items-center justify-end md:w-auto">
           <Select value={String(pageSize)} onValueChange={(value) => setPageSize(Number(value))}>
             <SelectTrigger className="h-10 w-full rounded-lg border border-white/20 bg-white/10 text-white backdrop-blur-lg hover:bg-white/10 data-[placeholder]:text-gray-300 sm:w-44">
@@ -230,7 +230,7 @@ const ProductsPage = () => {
               ))}
             </SelectContent>
           </Select>
-        </div>
+        </div> */}
       </div>
 
       {filtered.length === 0 ? (

@@ -31,7 +31,7 @@ const SAVED_TOAST_MS = 1500;
 
 const EnquiryDetailPage = () => {
   const { id } = useParams();
-  const enquiryId = Number(id);
+  const enquiryId = id ?? "";
 
   const [enquiry, setEnquiry] = useState<Enquiry | null>(null);
   const [loading, setLoading] = useState(true);
@@ -47,7 +47,7 @@ const EnquiryDetailPage = () => {
   }, []);
 
   useEffect(() => {
-    if (!Number.isFinite(enquiryId) || enquiryId < 1) {
+    if (!enquiryId) {
       setEnquiry(null);
       setLoading(false);
       return;
@@ -187,17 +187,9 @@ const EnquiryDetailPage = () => {
               Type
             </p>
             <p className="text-sm text-white/70">
-              {enquiry.type === "course" ? "Course Enquiry" : "Normal Enquiry"}
+              {enquiry.type}
             </p>
           </div>
-          {enquiry.type === "course" && enquiry.course ? (
-            <div className="space-y-1 sm:col-span-2">
-              <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-                Course
-              </p>
-              <p className="text-sm text-white/70">{enquiry.course}</p>
-            </div>
-          ) : null}
           <div className="space-y-1">
             <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
               Date

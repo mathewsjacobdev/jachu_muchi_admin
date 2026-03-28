@@ -11,20 +11,26 @@ export interface ManagedUser {
   status: ManagedUserStatus;
 }
 
+const USERS_LIST_PATH = "/users/all";
 const USERS_PATH = "/users";
 export const managedUserDetailPath = (id: string) => `/users/${id}`;
 
-type JsonPlaceholderUser = {
-  id: number;
+type BackendUserRow = {
+  _id: string;
   name: string;
   email: string;
+  role?: string;
+  status?: string;
 };
 
-const isJpUser = (x: unknown): x is JsonPlaceholderUser =>
+const isRecord = (x: unknown): x is Record<string, unknown> =>
+  typeof x === "object" && x !== null;
+
+const isBackendUserRow = (x: unknown): x is BackendUserRow =>
   typeof x === "object" &&
   x !== null &&
-  typeof (x as JsonPlaceholderUser).id === "number" &&
-  typeof (x as JsonPlaceholderUser).name === "string";
+  typeof (x as BackendUserRow)._id === "string" &&
+  typeof (x as BackendUserRow).email === "string";
 
 const isManagedRow = (x: unknown): x is ManagedUser => {
   if (typeof x !== "object" || x === null) return false;
@@ -35,70 +41,79 @@ const isManagedRow = (x: unknown): x is ManagedUser => {
   );
 };
 
-const roleFromIndex = (id: number): ManagedUserRole => {
-  const r = id % 3;
-  if (r === 0) return "Admin";
-  if (r === 1) return "Sub Admin";
+const normalizeRole = (raw: unknown): ManagedUserRole => {
+  const role = String(raw ?? "").trim().toLowerCase();
+  if (role === "admin") return "Admin";
+  if (role === "sub admin" || role === "sub-admin" || role === "subadmin") return "Sub Admin";
+  if (role === "editor") return "Editor";
   return "Editor";
 };
 
-const statusFromIndex = (id: number): ManagedUserStatus => (id % 4 === 0 ? "Inactive" : "Active");
+const normalizeStatus = (raw: unknown): ManagedUserStatus =>
+  String(raw ?? "").trim().toLowerCase() === "inactive" ? "Inactive" : "Active";
 
-const mapJpToManaged = (u: JsonPlaceholderUser): ManagedUser => ({
-  id: String(u.id),
-  name: u.name,
+const toBackendRole = (role: ManagedUserRole): string => role;
+
+const mapBackendToManaged = (u: BackendUserRow): ManagedUser => ({
+  id: u._id,
+  name: typeof u.name === "string" ? u.name : "",
   email: typeof u.email === "string" ? u.email : "",
-  role: roleFromIndex(u.id),
-  status: statusFromIndex(u.id),
+  role: normalizeRole(u.role),
+  status: normalizeStatus(u.status),
 });
 
 const rowToManaged = (raw: Record<string, unknown>): ManagedUser => ({
-  id: String(raw.id),
+  id: String(raw.id ?? raw._id ?? ""),
   name: String(raw.name ?? ""),
   email: String(raw.email ?? ""),
-  role:
-    raw.role === "Admin" || raw.role === "Sub Admin" || raw.role === "Editor"
-      ? raw.role
-      : "Editor",
-  status: raw.status === "Inactive" ? "Inactive" : "Active",
+  role: normalizeRole(raw.role),
+  status: normalizeStatus(raw.status),
 });
 
 export const getManagedUsers = async (): Promise<ManagedUser[]> => {
-  const res = await api.get<unknown>(USERS_PATH);
+  const res = await api.get<unknown>(USERS_LIST_PATH);
   const data = res.data;
-  if (!Array.isArray(data) || data.length === 0) return [];
-  if (isManagedRow(data[0])) return data as ManagedUser[];
-  if (isJpUser(data[0])) {
-    return (data as JsonPlaceholderUser[]).slice(0, 12).map(mapJpToManaged);
+  const list = isRecord(data) && Array.isArray(data.data) ? data.data : data;
+  if (!Array.isArray(list) || list.length === 0) return [];
+  if (isManagedRow(list[0])) return list as ManagedUser[];
+  if (isBackendUserRow(list[0])) {
+    return (list as BackendUserRow[]).map(mapBackendToManaged);
   }
-  return data.map((item) => rowToManaged(item as Record<string, unknown>));
+  return list
+    .filter((item): item is Record<string, unknown> => isRecord(item))
+    .map((item) => rowToManaged(item));
 };
 
 export const createManagedUser = async (
-  payload: Omit<ManagedUser, "id">,
+  payload: Omit<ManagedUser, "id"> & { password: string },
 ): Promise<ManagedUser> => {
   const res = await api.post<Record<string, unknown>>(USERS_PATH, {
     name: payload.name,
     email: payload.email,
-    username: payload.role.replace(/\s+/g, "-").toLowerCase(),
-    role: payload.role,
+    role: toBackendRole(payload.role),
     status: payload.status,
+    password: payload.password,
   });
-  const id = res.data.id != null ? String(res.data.id) : Date.now().toString();
+  const row = isRecord(res.data) && isRecord(res.data.data) ? res.data.data : res.data;
+  const id =
+    isRecord(row) && row._id != null
+      ? String(row._id)
+      : isRecord(row) && row.id != null
+        ? String(row.id)
+        : Date.now().toString();
   return { id, ...payload };
 };
 
 export const updateManagedUserApi = async (
   id: string,
-  payload: Omit<ManagedUser, "id">,
+  payload: Omit<ManagedUser, "id"> & { password?: string },
 ): Promise<void> => {
   await api.put(managedUserDetailPath(id), {
-    id: Number(id) || id,
     name: payload.name,
     email: payload.email,
-    username: payload.role.replace(/\s+/g, "-").toLowerCase(),
-    role: payload.role,
+    role: toBackendRole(payload.role),
     status: payload.status,
+    ...(payload.password?.trim() ? { password: payload.password } : {}),
   });
 };
 
