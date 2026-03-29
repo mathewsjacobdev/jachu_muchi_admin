@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useState } from "react";
-import { ImagePlus, Loader2, Trash2 } from "lucide-react";
+import { useEffect, useMemo, useState, useDeferredValue } from "react";
+import { ImagePlus, Loader2, Trash2, Search, Pencil } from "lucide-react";
 import PageHeader from "@/components/shared/PageHeader";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -19,6 +19,8 @@ import {
   createGalleryItem,
   deleteGalleryItemApi,
   getGalleryItems,
+  filterGalleryItems,
+  updateGalleryItemApi,
   type GalleryCategory,
   type GalleryItem,
 } from "@/api/services/gallery.service";
@@ -28,11 +30,24 @@ const uploadCategories: GalleryCategory[] = ["Campus", "Labs", "Events"];
 
 const GalleryPage = () => {
   const [items, setItems] = useState<GalleryItem[]>([]);
+  const [allItems, setAllItems] = useState<GalleryItem[] | null>(null);
+  const [serverTotal, setServerTotal] = useState(0);
+
   const [isLoading, setIsLoading] = useState(true);
   const [categoryFilter, setCategoryFilter] = useState<"All" | GalleryCategory>("All");
 
+  const [search, setSearch] = useState("");
+  const deferredSearch = useDeferredValue(search.trim());
+  const [dateFilter, setDateFilter] = useState("");
+  const [order, setOrder] = useState<"asc" | "desc">("desc");
+
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(9);
+  const [editingId, setEditingId] = useState<string | null>(null);
+
+  const hasFilter = deferredSearch !== "" || categoryFilter !== "All" || dateFilter !== "" || order !== "desc";
+
+  useEffect(() => setPage(1), [deferredSearch, categoryFilter, pageSize, dateFilter, order]);
   const [formOpen, setFormOpen] = useState(false);
   const [form, setForm] = useState({
     title: "",
@@ -52,7 +67,9 @@ const GalleryPage = () => {
     setIsLoading(true);
     setLoadError("");
     try {
-      setItems(await getGalleryItems());
+      const data = await getGalleryItems();
+      setAllItems(data);
+      setServerTotal(data.length);
     } catch (e) {
       setLoadError(e instanceof Error ? e.message : "Failed to load gallery items.");
     } finally {
@@ -61,26 +78,64 @@ const GalleryPage = () => {
   };
 
   useEffect(() => {
-    void load();
-  }, []);
+    let cancelled = false;
+    const controller = new AbortController();
 
-  const filteredItems = useMemo(
-    () => items.filter((item) => categoryFilter === "All" || item.category === categoryFilter),
-    [items, categoryFilter],
-  );
+    const fetchList = async () => {
+      setIsLoading(true);
+      setLoadError("");
+      try {
+        if (!hasFilter) {
+          const data = await getGalleryItems();
+          if (!cancelled) {
+            setAllItems(data);
+            setServerTotal(data.length);
+          }
+        } else {
+          const data = await filterGalleryItems(
+            {
+              page,
+              limit: pageSize,
+              search: deferredSearch || undefined,
+              type: categoryFilter !== "All" ? categoryFilter : undefined,
+              date: dateFilter || undefined,
+              order,
+            },
+            controller.signal
+          );
+          if (!cancelled) {
+            setAllItems(null);
+            setItems(data.data);
+            setServerTotal(data.total);
+          }
+        }
+      } catch (e) {
+        if ((e as Error).name === "AbortError") return;
+        if (!cancelled) setLoadError(e instanceof Error ? e.message : "Failed to load gallery items.");
+      } finally {
+        if (!cancelled) setIsLoading(false);
+      }
+    };
+    void fetchList();
 
-  const totalPages = useMemo(() => {
-    const total = Math.ceil(filteredItems.length / pageSize);
-    return total > 0 ? total : 1;
-  }, [filteredItems.length, pageSize]);
+    return () => {
+      cancelled = true;
+      controller.abort();
+    };
+  }, [page, pageSize, deferredSearch, categoryFilter, dateFilter, order, hasFilter]);
 
-  useEffect(() => setPage(1), [categoryFilter, pageSize]);
+  const displayedItems = useMemo(() => {
+    if (!hasFilter && allItems) {
+      const start = (page - 1) * pageSize;
+      return allItems.slice(start, start + pageSize);
+    }
+    return items;
+  }, [hasFilter, allItems, items, page, pageSize]);
+
+  const totalItems = hasFilter ? serverTotal : (allItems?.length ?? 0);
+  const totalPages = Math.ceil(totalItems / pageSize) || 1;
+
   useEffect(() => setPage((p) => Math.min(p, totalPages)), [totalPages]);
-
-  const paginatedItems = useMemo(() => {
-    const start = (page - 1) * pageSize;
-    return filteredItems.slice(start, start + pageSize);
-  }, [filteredItems, page, pageSize]);
 
   useEffect(() => () => {
     if (previewImage.startsWith("blob:")) {
@@ -99,6 +154,22 @@ const GalleryPage = () => {
     });
     setPreviewImage("");
     setFormError("");
+    setEditingId(null);
+    setFormOpen(true);
+  };
+
+  const openEditForm = (item: GalleryItem) => {
+    if (previewImage.startsWith("blob:")) {
+      URL.revokeObjectURL(previewImage);
+    }
+    setForm({
+      title: item.title,
+      category: item.category,
+      imageFile: null,
+    });
+    setPreviewImage(item.image);
+    setFormError("");
+    setEditingId(item.id);
     setFormOpen(true);
   };
 
@@ -133,11 +204,11 @@ const GalleryPage = () => {
       setFormError("Title is required.");
       return;
     }
-    if (!previewImage || !form.imageFile) {
+    if (!editingId && (!previewImage || !form.imageFile)) {
       setFormError("Image is required.");
       return;
     }
-    if (form.imageFile.size > MAX_IMAGE_SIZE_BYTES) {
+    if (form.imageFile && form.imageFile.size > MAX_IMAGE_SIZE_BYTES) {
       setFormError("Image size must be 2MB or less.");
       return;
     }
@@ -145,12 +216,29 @@ const GalleryPage = () => {
     setFormError("");
     setSaving(true);
     try {
-      const created = await createGalleryItem({
-        title: form.title.trim(),
-        category: form.category,
-        image: previewImage,
-      });
-      setItems((prev) => [created, ...prev]);
+      if (editingId) {
+        const updated = await updateGalleryItemApi(editingId, {
+          title: form.title.trim(),
+          category: form.category,
+          imageFile: form.imageFile,
+        });
+        if (allItems) {
+          setAllItems((prev) => (prev ?? []).map((x) => (x.id === editingId ? updated : x)));
+        }
+        setItems((prev) => prev.map((x) => (x.id === editingId ? updated : x)));
+      } else {
+        if (!form.imageFile) throw new Error("Image file required");
+        const created = await createGalleryItem({
+          title: form.title.trim(),
+          category: form.category,
+          imageFile: form.imageFile,
+        });
+        if (allItems) {
+          setAllItems((prev) => [created, ...(prev ?? [])]);
+        }
+        setItems((prev) => [created, ...prev]);
+        setServerTotal((prev) => prev + 1);
+      }
       setFormOpen(false);
     } catch (e) {
       setFormError(e instanceof Error ? e.message : "Failed to save image. Please try again.");
@@ -168,6 +256,10 @@ const GalleryPage = () => {
       return next;
     });
     setItems((prev) => prev.filter((x) => x.id !== itemId));
+    if (allItems) {
+      setAllItems((prev) => (prev ?? []).filter((x) => x.id !== itemId));
+    }
+    setServerTotal((p) => Math.max(0, p - 1));
     try {
       await deleteGalleryItemApi(itemId);
     } catch (e) {
@@ -186,7 +278,7 @@ const GalleryPage = () => {
     <div className="space-y-6">
       <PageHeader
         title="Gallery Management"
-        description={isLoading ? "Loading…" : `${items.length} media items`}
+        description={isLoading ? "Loading…" : `${totalItems} media items`}
         action={(
           <Button onClick={openUploadForm} size="sm">
             <ImagePlus className="mr-1 h-4 w-4" />
@@ -196,21 +288,51 @@ const GalleryPage = () => {
       />
       {loadError ? <p className="text-sm text-red-400">{loadError}</p> : null}
       {deleteError ? <p className="text-sm text-red-400">{deleteError}</p> : null}
+      <div className="mb-4 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+        <div className="flex flex-1 flex-col gap-3 md:flex-row md:items-center">
+          <div className="relative w-full max-w-sm">
+            <Search className="absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-blue-400" />
+            <Input
+              placeholder="Search gallery…"
+              className="pl-8 w-full"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              autoComplete="off"
+            />
+          </div>
 
-      <div className="rounded-xl border border-white/10 bg-white/5 p-3 shadow-lg backdrop-blur-xl transition-all duration-300 hover:scale-[1.02] hover:shadow-2xl sm:p-4 md:p-5">
-        <div className="flex flex-wrap items-center gap-2">
-          {categories.map((category) => (
-            <button
-              key={category}
-              type="button"
-              onClick={() => setCategoryFilter(category)}
-              className={`rounded-full px-3 py-1.5 text-xs font-semibold transition-all duration-200 ${
-                categoryFilter === category ? "bg-slate-900 text-white" : "bg-slate-100 text-slate-700 hover:bg-slate-200"
-              }`}
-            >
-              {category}
-            </button>
-          ))}
+          <Select value={categoryFilter} onValueChange={(val) => setCategoryFilter(val as any)}>
+            <SelectTrigger className="w-full md:w-[160px] h-10 rounded-lg border border-white/20 bg-white/10 text-white backdrop-blur-lg hover:bg-white/10 data-[placeholder]:text-gray-300">
+              <SelectValue placeholder="Category" />
+            </SelectTrigger>
+            <SelectContent className="border border-white/10 bg-slate-900 text-white">
+              {categories.map((category) => (
+                <SelectItem key={category} value={category} className="focus:bg-white/10 focus:text-white data-[state=checked]:bg-blue-500/20 data-[state=checked]:text-blue-200">{category}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+
+          <div className="w-full min-w-[140px]">
+              <input
+                type="date"
+                value={dateFilter}
+                onChange={(e) => {
+                  setPage(1);
+                  setDateFilter(e.target.value);
+                }}
+                className="h-10 w-full rounded-lg border border-white/20 bg-white/10 px-3 flex items-center text-sm text-white backdrop-blur-lg hover:bg-white/15 focus:outline-none focus:ring-2 focus:ring-blue-500 [color-scheme:dark]"
+              />
+            </div>
+
+          <Select value={order} onValueChange={(val: "asc" | "desc") => setOrder(val)}>
+            <SelectTrigger className="w-full md:w-[140px] h-10 rounded-lg border border-white/20 bg-white/10 text-white backdrop-blur-lg hover:bg-white/10 data-[placeholder]:text-gray-300">
+              <SelectValue placeholder="Order" />
+            </SelectTrigger>
+            <SelectContent className="border border-white/10 bg-slate-900 text-white">
+              <SelectItem value="desc" className="focus:bg-white/10 focus:text-white data-[state=checked]:bg-blue-500/20 data-[state=checked]:text-blue-200">Descending</SelectItem>
+              <SelectItem value="asc" className="focus:bg-white/10 focus:text-white data-[state=checked]:bg-blue-500/20 data-[state=checked]:text-blue-200">Ascending</SelectItem>
+            </SelectContent>
+          </Select>
         </div>
       </div>
 
@@ -219,60 +341,46 @@ const GalleryPage = () => {
           <Loader2 className="h-6 w-6 animate-spin" />
           <span className="text-sm">Loading gallery…</span>
         </div>
+      ) : displayedItems.length === 0 ? (
+        <div className="rounded-xl border border-dashed border-white/20 bg-white/10 p-8 text-center text-sm text-gray-300 backdrop-blur-lg">
+          No gallery items found
+        </div>
       ) : (
         <>
-          <div className="mb-3 flex items-center justify-end">
-            <Select
-              value={String(pageSize)}
-              onValueChange={(value) => {
-                setPageSize(Number(value));
-                setPage(1);
-              }}
-            >
-              <SelectTrigger className="h-10 w-full rounded-lg border border-white/20 bg-white/10 text-white backdrop-blur-lg hover:bg-white/10 data-[placeholder]:text-gray-300 sm:w-44">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent className="border border-white/10 bg-slate-900 text-white">
-                {[6, 9, 12].map((size) => (
-                  <SelectItem
-                    key={size}
-                    value={String(size)}
-                    className="focus:bg-white/10 focus:text-white data-[state=checked]:bg-blue-500/20 data-[state=checked]:text-blue-200"
-                  >
-                    {size}/page
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
-            {paginatedItems.map((item) => (
-            <div key={item.id} className="overflow-hidden rounded-xl border border-white/10 bg-white/5 text-white/80 shadow-lg backdrop-blur-xl transition-all duration-300 hover:scale-[1.02] hover:shadow-2xl">
-              <img src={item.image} alt={item.title} className="h-44 w-full object-cover" />
-              <div className="space-y-2 p-3 sm:p-4 md:p-5">
-                <div className="flex items-center justify-between">
-                  <p className="text-sm font-semibold text-white/90">{item.title}</p>
-                  <span className="rounded-full border border-blue-500/30 bg-blue-500/20 px-2.5 py-1 text-xs font-semibold text-blue-400">
-                    {item.category}
-                  </span>
-                </div>
-                <div className="flex justify-end">
-                  <button
-                    type="button"
-                    onClick={() => void removeItem(item.id)}
-                    disabled={deletingIds.has(item.id)}
-                    className="rounded-lg p-2 text-red-400 transition-all duration-200 hover:scale-[1.02] hover:bg-white/10"
-                  >
-                    {deletingIds.has(item.id) ? (
-                      <Loader2 className="h-4 w-4 animate-spin" />
-                    ) : (
-                      <Trash2 className="h-4 w-4" />
-                    )}
-                  </button>
+            {displayedItems.map((item) => (
+              <div key={item.id} className="overflow-hidden rounded-xl border border-white/10 bg-white/5 text-white/80 shadow-lg backdrop-blur-xl transition-all duration-300 hover:scale-[1.02] hover:shadow-2xl">
+                <img src={item.image} alt={item.title} className="h-44 w-full object-cover" />
+                <div className="space-y-2 p-3 sm:p-4 md:p-5">
+                  <div className="flex items-center justify-between">
+                    <p className="text-sm font-semibold text-white/90">{item.title}</p>
+                    <span className="rounded-full border border-blue-500/30 bg-blue-500/20 px-2.5 py-1 text-xs font-semibold text-blue-400">
+                      {item.category}
+                    </span>
+                  </div>
+                  <div className="flex justify-end gap-2">
+                    <button
+                      type="button"
+                      onClick={() => openEditForm(item)}
+                      className="rounded-lg p-2 text-blue-400 transition-all duration-200 hover:scale-[1.02] hover:bg-white/10"
+                    >
+                      <Pencil className="h-4 w-4" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => void removeItem(item.id)}
+                      disabled={deletingIds.has(item.id)}
+                      className="rounded-lg p-2 text-red-400 transition-all duration-200 hover:scale-[1.02] hover:bg-white/10"
+                    >
+                      {deletingIds.has(item.id) ? (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                      ) : (
+                        <Trash2 className="h-4 w-4" />
+                      )}
+                    </button>
+                  </div>
                 </div>
               </div>
-            </div>
             ))}
           </div>
 
@@ -364,8 +472,8 @@ const GalleryPage = () => {
 
               <div className="mt-3 text-center text-sm text-gray-400">
                 Showing{" "}
-                {Math.min((page - 1) * pageSize + 1, filteredItems.length)}-
-                {Math.min(page * pageSize, filteredItems.length)} of {filteredItems.length}
+                {Math.min((page - 1) * pageSize + 1, totalItems)}-
+                {Math.min(page * pageSize, totalItems)} of {totalItems}
               </div>
             </div>
           ) : null}
@@ -375,7 +483,7 @@ const GalleryPage = () => {
       <Dialog open={formOpen} onOpenChange={setFormOpen}>
         <DialogContent className="border-white/10 bg-white/10 backdrop-blur-lg sm:max-w-lg">
           <DialogHeader>
-            <DialogTitle>Upload Image</DialogTitle>
+            <DialogTitle>{editingId ? "Edit Image" : "Upload Image"}</DialogTitle>
           </DialogHeader>
 
           <div className="space-y-4 rounded-xl bg-white/10 p-4 backdrop-blur-lg">

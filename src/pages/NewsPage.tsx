@@ -17,6 +17,7 @@ import {
 import { Plus, Pencil, Trash2, Calendar, Search, Newspaper, Image as ImageIcon, Loader2 } from "lucide-react";
 import {
   deleteNews,
+  getNews,
   getNewsFilter,
   getNewsStats,
   type ArticleFilterOrder,
@@ -63,12 +64,15 @@ const NewsPage = () => {
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("All");
-  const [sortBy, setSortBy] = useState<ArticleFilterSortBy>("createdAt");
+  const [dateFilter, setDateFilter] = useState("");
   const [order, setOrder] = useState<ArticleFilterOrder>("desc");
   const [page, setPage] = useState(1);
   const [stats, setStats] = useState<{ total: number; published: number; draft: number } | null>(null);
+  const [allNews, setAllNews] = useState<NewsItem[] | null>(null);
 
   const deferredSearch = useDeferredValue(search.trim());
+
+  const hasFilter = deferredSearch !== "" || statusFilter !== "All" || dateFilter !== "" || order !== "desc";
 
   const refreshStats = useCallback(() => {
     void getNewsStats().then((s) => {
@@ -79,26 +83,43 @@ const NewsPage = () => {
   const loadNews = useCallback(async () => {
     setIsLoading(true);
     try {
-      const result = await getNewsFilter({
-        page,
-        limit: PAGE_SIZE,
-        search: deferredSearch || undefined,
-        status: statusFilter,
-        sortBy,
-        order,
-      });
-      setNews(result.data);
-      setTotalCount(result.total);
-      setServerPages(Math.max(1, result.pages));
+      if (!hasFilter) {
+        const data = await getNews();
+        setAllNews(data);
+        setTotalCount(data.length);
+        setServerPages(Math.max(1, Math.ceil(data.length / PAGE_SIZE)));
+      } else {
+        const result = await getNewsFilter({
+          page,
+          limit: PAGE_SIZE,
+          search: deferredSearch || undefined,
+          status: statusFilter,
+              date: dateFilter || undefined,
+          order,
+        });
+        setAllNews(null);
+        setNews(result.data);
+        setTotalCount(result.total);
+        setServerPages(Math.max(1, result.pages));
+      }
     } catch (err) {
       console.error(err);
       setNews([]);
+      setAllNews(null);
       setTotalCount(0);
       setServerPages(1);
     } finally {
       setIsLoading(false);
     }
-  }, [page, deferredSearch, statusFilter, sortBy, order]);
+  }, [page, deferredSearch, statusFilter, dateFilter, order, hasFilter]);
+
+  const displayedNews = useMemo(() => {
+    if (!hasFilter && allNews) {
+      const start = (page - 1) * PAGE_SIZE;
+      return allNews.slice(start, start + PAGE_SIZE);
+    }
+    return news;
+  }, [hasFilter, allNews, news, page]);
 
   useEffect(() => {
     refreshStats();
@@ -295,28 +316,17 @@ const NewsPage = () => {
               </SelectContent>
             </Select>
 
-            <Select
-              value={sortBy}
-              onValueChange={(value) => {
-                setPage(1);
-                setSortBy(value as ArticleFilterSortBy);
-              }}
-            >
-              <SelectTrigger className={selectTriggerClass}>
-                <SelectValue placeholder="Sort by" />
-              </SelectTrigger>
-              <SelectContent className="border border-white/10 bg-slate-900 text-white">
-                {SORT_OPTIONS.map((opt) => (
-                  <SelectItem
-                    key={opt.value}
-                    className="focus:bg-white/10 focus:text-white data-[state=checked]:bg-blue-500/20 data-[state=checked]:text-blue-200"
-                    value={opt.value}
-                  >
-                    {opt.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <div className="w-full sm:w-[150px]">
+              <input
+                type="date"
+                value={dateFilter}
+                onChange={(e) => {
+                  setPage(1);
+                  setDateFilter(e.target.value);
+                }}
+                className="h-10 w-full rounded-lg border border-white/20 bg-white/10 px-3 flex items-center text-sm text-white backdrop-blur-lg hover:bg-white/15 focus:outline-none focus:ring-2 focus:ring-blue-500 [color-scheme:dark]"
+              />
+            </div>
 
             <Select
               value={order}
@@ -349,7 +359,7 @@ const NewsPage = () => {
           <Loader2 className="h-5 w-5 animate-spin" />
           Loading articles...
         </div>
-      ) : news.length === 0 ? (
+      ) : displayedNews.length === 0 ? (
         <div className="rounded-xl border border-dashed border-white/20 bg-white/10 p-12 text-center shadow-md backdrop-blur-lg transition-all duration-300 hover:scale-[1.02] hover:shadow-2xl">
           <div className="mx-auto mb-3 flex h-11 w-11 items-center justify-center rounded-full bg-white/10 text-gray-200">
             <Newspaper className="h-5 w-5" />
@@ -362,7 +372,7 @@ const NewsPage = () => {
       ) : (
         <>
           <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
-            {news.map((n) => (
+            {displayedNews.map((n) => (
               <div
                 key={n.id}
                 className="group overflow-hidden rounded-xl border border-white/10 bg-gradient-to-br from-[#0f172a] to-[#1e293b] shadow-lg transition-all duration-300 hover:-translate-y-1 hover:shadow-2xl"

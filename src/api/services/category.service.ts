@@ -2,6 +2,7 @@ import { api } from "../client";
 import type { Category } from "@/types";
 
 export const CATEGORIES_LIST_PATH = "/categories/all";
+export const CATEGORIES_FILTER_PATH = "/categories/filter";
 const CATEGORIES_BASE_PATH = "/categories";
 export const categoryDetailPath = (id: string) => `${CATEGORIES_BASE_PATH}/${id}`;
 
@@ -43,9 +44,9 @@ export const getCategories = async (): Promise<Category[]> => {
   const data = res.data;
   const list = (
     typeof data === "object" &&
-    data !== null &&
-    "data" in data &&
-    Array.isArray((data as { data?: unknown }).data)
+      data !== null &&
+      "data" in data &&
+      Array.isArray((data as { data?: unknown }).data)
       ? (data as { data: unknown[] }).data
       : data
   );
@@ -63,6 +64,54 @@ export const getCategories = async (): Promise<Category[]> => {
   }
 };
 
+export type CategoryFilterSortBy = "createdAt" | "name" | "productCount";
+export type CategoryFilterOrder = "asc" | "desc";
+
+export type CategoriesFilterParams = {
+  page?: number;
+  limit?: number;
+  search?: string;
+  date?: string;
+  sortBy?: CategoryFilterSortBy | string;
+  order?: CategoryFilterOrder;
+};
+
+export type CategoriesFilterResult = {
+  data: Category[];
+  total: number;
+  page: number;
+  limit: number;
+};
+
+export const filterCategories = async (
+  params: CategoriesFilterParams,
+  signal?: AbortSignal
+): Promise<CategoriesFilterResult> => {
+  const q = new URLSearchParams();
+  if (params.page) q.set("page", String(params.page));
+  if (params.limit) q.set("limit", String(params.limit));
+  if (params.search?.trim()) q.set("search", params.search.trim());
+  if (params.date) q.set("date", params.date);
+  if (params.sortBy) if (params.date) q.set("date", params.date);
+  q.set("sortBy", params.sortBy);
+  if (params.order) q.set("order", params.order);
+
+  const res = await api.get<{
+    success: boolean;
+    total: number;
+    page: number;
+    limit: number;
+    data: CategoryApiRow[];
+  }>(`${CATEGORIES_FILTER_PATH}?${q.toString()}`, signal ? { signal } : undefined);
+
+  return {
+    data: Array.isArray(res.data.data) ? res.data.data.map(mapApiCategoryToCategory) : [],
+    total: res.data.total ?? 0,
+    page: res.data.page ?? params.page ?? 1,
+    limit: res.data.limit ?? params.limit ?? 10,
+  };
+};
+
 export const createCategory = async (payload: Omit<Category, "id">): Promise<Category> => {
   const categoryName = payload.name.trim();
   const res = await api.post<Record<string, unknown>>(CATEGORIES_BASE_PATH, {
@@ -71,10 +120,10 @@ export const createCategory = async (payload: Omit<Category, "id">): Promise<Cat
   const data = res.data ?? {};
   const createdRow =
     typeof data === "object" &&
-    data !== null &&
-    "data" in data &&
-    typeof (data as { data?: unknown }).data === "object" &&
-    (data as { data?: unknown }).data !== null
+      data !== null &&
+      "data" in data &&
+      typeof (data as { data?: unknown }).data === "object" &&
+      (data as { data?: unknown }).data !== null
       ? ((data as { data: Record<string, unknown> }).data ?? {})
       : (data as Record<string, unknown>);
   const id =

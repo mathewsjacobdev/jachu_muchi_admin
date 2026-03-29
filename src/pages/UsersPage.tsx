@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, useDeferredValue } from "react";
 import { Loader2, Plus, Search, Pencil, Trash2 } from "lucide-react";
 import PageHeader from "@/components/shared/PageHeader";
 import DeleteModal from "@/components/shared/DeleteModal";
@@ -20,6 +20,7 @@ import {
   createManagedUser,
   deleteManagedUserApi,
   getManagedUsers,
+  filterManagedUsers,
   updateManagedUserApi,
   type ManagedUser,
   type ManagedUserRole,
@@ -47,8 +48,17 @@ const emptyForm = {
 
 const UsersPage = () => {
   const [users, setUsers] = useState<ManagedUser[]>([]);
+  const [allUsers, setAllUsers] = useState<ManagedUser[] | null>(null);
+  const [serverTotal, setServerTotal] = useState(0);
+
   const [isLoading, setIsLoading] = useState(true);
   const [search, setSearch] = useState("");
+  const deferredSearch = useDeferredValue(search.trim());
+  const [statusFilter, setStatusFilter] = useState("All");
+  const [roleFilter, setRoleFilter] = useState("All");
+  const [dateFilter, setDateFilter] = useState("");
+  const [order, setOrder] = useState<"asc" | "desc">("desc");
+
   const [formOpen, setFormOpen] = useState(false);
   const [editing, setEditing] = useState<ManagedUser | null>(null);
   const [form, setForm] = useState(emptyForm);
@@ -59,41 +69,69 @@ const UsersPage = () => {
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(9);
 
+  const hasFilter = deferredSearch !== "" || statusFilter !== "All" || roleFilter !== "All" || dateFilter !== "" || order !== "desc";
+
+  useEffect(() => setPage(1), [deferredSearch, statusFilter, roleFilter, pageSize, dateFilter, order]);
+
   useEffect(() => {
-    const load = async () => {
+    let cancelled = false;
+    const controller = new AbortController();
+
+    const loadList = async () => {
       setIsLoading(true);
       try {
-        setUsers(await getManagedUsers());
+        if (!hasFilter) {
+          const data = await getManagedUsers();
+          if (!cancelled) {
+            setAllUsers(data);
+            setServerTotal(data.length);
+          }
+        } else {
+          const data = await filterManagedUsers(
+            {
+              page,
+              limit: pageSize,
+              search: deferredSearch || undefined,
+              status: statusFilter !== "All" ? statusFilter : undefined,
+              type: roleFilter !== "All" ? roleFilter : undefined,
+              date: dateFilter || undefined,
+              order,
+            },
+            controller.signal
+          );
+          if (!cancelled) {
+            setAllUsers(null);
+            setUsers(data.data);
+            setServerTotal(data.total);
+          }
+        }
       } catch (e) {
-        console.error(e);
+        if ((e as Error).name === "AbortError") return;
+        if (!cancelled) console.error(e);
       } finally {
-        setIsLoading(false);
+        if (!cancelled) setIsLoading(false);
       }
     };
-    void load();
-  }, []);
+    void loadList();
 
-  const filteredUsers = useMemo(() => {
-    const query = search.trim().toLowerCase();
-    return users.filter((user) =>
-      user.name.toLowerCase().includes(query) ||
-      user.email.toLowerCase().includes(query) ||
-      user.role.toLowerCase().includes(query)
-    );
-  }, [users, search]);
+    return () => {
+      cancelled = true;
+      controller.abort();
+    };
+  }, [page, pageSize, deferredSearch, statusFilter, roleFilter, dateFilter, order, hasFilter]);
 
-  const totalPages = useMemo(() => {
-    const total = Math.ceil(filteredUsers.length / pageSize);
-    return total > 0 ? total : 1;
-  }, [filteredUsers.length, pageSize]);
+  const displayedUsers = useMemo(() => {
+    if (!hasFilter && allUsers) {
+      const start = (page - 1) * pageSize;
+      return allUsers.slice(start, start + pageSize);
+    }
+    return users;
+  }, [hasFilter, allUsers, users, page, pageSize]);
 
-  useEffect(() => setPage(1), [search, pageSize]);
+  const totalItems = hasFilter ? serverTotal : (allUsers?.length ?? 0);
+  const totalPages = Math.ceil(totalItems / pageSize) || 1;
+
   useEffect(() => setPage((p) => Math.min(p, totalPages)), [totalPages]);
-
-  const paginatedUsers = useMemo(() => {
-    const start = (page - 1) * pageSize;
-    return filteredUsers.slice(start, start + pageSize);
-  }, [filteredUsers, page, pageSize]);
 
   const openAdd = () => {
     setEditing(null);
@@ -130,12 +168,19 @@ const UsersPage = () => {
     try {
       if (editing) {
         await updateManagedUserApi(editing.id, form);
+        if (allUsers) {
+          setAllUsers((prev) => (prev ?? []).map((user) => user.id === editing.id ? { ...user, ...form } : user));
+        }
         setUsers((prev) =>
           prev.map((user) => user.id === editing.id ? { ...user, ...form } : user),
         );
       } else {
         const created = await createManagedUser(form);
+        if (allUsers) {
+          setAllUsers((prev) => [created, ...(prev ?? [])]);
+        }
         setUsers((prev) => [created, ...prev]);
+        setServerTotal((prev) => prev + 1);
       }
       setFormOpen(false);
     } catch (e) {
@@ -148,6 +193,10 @@ const UsersPage = () => {
   const handleDelete = async () => {
     if (!deleteId) return;
     setUsers((prev) => prev.filter((user) => user.id !== deleteId));
+    if (allUsers) {
+      setAllUsers((prev) => (prev ?? []).filter((user) => user.id !== deleteId));
+    }
+    setServerTotal((prev) => Math.max(0, prev - 1));
     setDeleteId(null);
     try {
       await deleteManagedUserApi(deleteId);
@@ -157,31 +206,41 @@ const UsersPage = () => {
   };
 
   const updateRole = async (id: string, role: ManagedUserRole) => {
-    const user = users.find((u) => u.id === id);
+    const user = (allUsers ?? users).find((u) => u.id === id);
     if (!user) return;
     const next = { ...user, role };
     setUsers((prev) => prev.map((u) => (u.id === id ? next : u)));
+    if (allUsers) {
+      setAllUsers((prev) => (prev ?? []).map((u) => (u.id === id ? next : u)));
+    }
     try {
       await updateManagedUserApi(id, next);
     } catch (e) {
       console.error(e);
       setUsers((prev) => prev.map((u) => (u.id === id ? user : u)));
+      if (allUsers) {
+        setAllUsers((prev) => (prev ?? []).map((u) => (u.id === id ? user : u)));
+      }
     }
   };
 
   const toggleStatus = async (id: string) => {
-    const user = users.find((u) => u.id === id);
+    const user = (allUsers ?? users).find((u) => u.id === id);
     if (!user) return;
     const status: ManagedUserStatus = user.status === "Active" ? "Inactive" : "Active";
     const next = { ...user, status };
-    setUsers((prev) =>
-      prev.map((u) => (u.id === id ? next : u)),
-    );
+    setUsers((prev) => prev.map((u) => (u.id === id ? next : u)));
+    if (allUsers) {
+      setAllUsers((prev) => (prev ?? []).map((u) => (u.id === id ? next : u)));
+    }
     try {
       await updateManagedUserApi(id, next);
     } catch (e) {
       console.error(e);
       setUsers((prev) => prev.map((u) => (u.id === id ? user : u)));
+      if (allUsers) {
+        setAllUsers((prev) => (prev ?? []).map((u) => (u.id === id ? user : u)));
+      }
     }
   };
 
@@ -189,7 +248,7 @@ const UsersPage = () => {
     <div className="space-y-6">
       <PageHeader
         title="User Management"
-        description={isLoading ? "Loading…" : `${users.length} admin users`}
+        description={isLoading ? "Loading…" : `${totalItems} admin users`}
         action={(
           <Button onClick={openAdd} size="sm">
             <Plus className="mr-1 h-4 w-4" />
@@ -199,39 +258,60 @@ const UsersPage = () => {
       />
 
       <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-        <div className="max-w-sm w-full">
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-blue-400" />
+        <div className="flex flex-1 flex-col gap-3 md:flex-row md:items-center flex-wrap">
+          <div className="relative w-full max-w-sm">
+            <Search className="absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-blue-400" />
             <Input
               placeholder="Search users..."
-              className="pl-9"
+              className="pl-8 w-full"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
+              autoComplete="off"
             />
           </div>
-        </div>
 
-        <div className="flex justify-end">
-          <Select
-            value={String(pageSize)}
-            onValueChange={(value) => {
-              setPageSize(Number(value));
-              setPage(1);
-            }}
-          >
-            <SelectTrigger className="h-10 w-full rounded-lg border border-white/20 bg-white/10 text-white backdrop-blur-lg hover:bg-white/10 data-[placeholder]:text-gray-300 sm:w-44">
-              <SelectValue />
+          <Select value={statusFilter} onValueChange={setStatusFilter}>
+            <SelectTrigger className="w-full md:w-[130px] h-10 rounded-lg border border-white/20 bg-white/10 text-white backdrop-blur-lg hover:bg-white/10 data-[placeholder]:text-gray-300">
+              <SelectValue placeholder="Status" />
             </SelectTrigger>
             <SelectContent className="border border-white/10 bg-slate-900 text-white">
-              {[6, 9, 12].map((size) => (
-                <SelectItem
-                  key={size}
-                  value={String(size)}
-                  className="focus:bg-white/10 focus:text-white data-[state=checked]:bg-blue-500/20 data-[state=checked]:text-blue-200"
-                >
-                  {size}/page
-                </SelectItem>
-              ))}
+              <SelectItem value="All" className="focus:bg-white/10 focus:text-white data-[state=checked]:bg-blue-500/20 data-[state=checked]:text-blue-200">All Status</SelectItem>
+              <SelectItem value="Active" className="focus:bg-white/10 focus:text-white data-[state=checked]:bg-blue-500/20 data-[state=checked]:text-blue-200">Active</SelectItem>
+              <SelectItem value="Inactive" className="focus:bg-white/10 focus:text-white data-[state=checked]:bg-blue-500/20 data-[state=checked]:text-blue-200">Inactive</SelectItem>
+            </SelectContent>
+          </Select>
+
+          <Select value={roleFilter} onValueChange={setRoleFilter}>
+            <SelectTrigger className="w-full md:w-[130px] h-10 rounded-lg border border-white/20 bg-white/10 text-white backdrop-blur-lg hover:bg-white/10 data-[placeholder]:text-gray-300">
+              <SelectValue placeholder="Role" />
+            </SelectTrigger>
+            <SelectContent className="border border-white/10 bg-slate-900 text-white">
+              <SelectItem value="All" className="focus:bg-white/10 focus:text-white data-[state=checked]:bg-blue-500/20 data-[state=checked]:text-blue-200">All Roles</SelectItem>
+              <SelectItem value="Admin" className="focus:bg-white/10 focus:text-white data-[state=checked]:bg-blue-500/20 data-[state=checked]:text-blue-200">Admin</SelectItem>
+              <SelectItem value="Sub Admin" className="focus:bg-white/10 focus:text-white data-[state=checked]:bg-blue-500/20 data-[state=checked]:text-blue-200">Sub Admin</SelectItem>
+              <SelectItem value="Editor" className="focus:bg-white/10 focus:text-white data-[state=checked]:bg-blue-500/20 data-[state=checked]:text-blue-200">Editor</SelectItem>
+            </SelectContent>
+          </Select>
+
+          <div className="w-full min-w-[140px]">
+            <input
+              type="date"
+              value={dateFilter}
+              onChange={(e) => {
+                setPage(1);
+                setDateFilter(e.target.value);
+              }}
+              className="h-10 w-full rounded-lg border border-white/20 bg-white/10 px-3 flex items-center text-sm text-white backdrop-blur-lg hover:bg-white/15 focus:outline-none focus:ring-2 focus:ring-blue-500 [color-scheme:dark]"
+            />
+          </div>
+
+          <Select value={order} onValueChange={(val: "asc" | "desc") => setOrder(val)}>
+            <SelectTrigger className="w-full md:w-[130px] h-10 rounded-lg border border-white/20 bg-white/10 text-white backdrop-blur-lg hover:bg-white/10 data-[placeholder]:text-gray-300">
+              <SelectValue placeholder="Order" />
+            </SelectTrigger>
+            <SelectContent className="border border-white/10 bg-slate-900 text-white">
+              <SelectItem value="desc" className="focus:bg-white/10 focus:text-white data-[state=checked]:bg-blue-500/20 data-[state=checked]:text-blue-200">Descending</SelectItem>
+              <SelectItem value="asc" className="focus:bg-white/10 focus:text-white data-[state=checked]:bg-blue-500/20 data-[state=checked]:text-blue-200">Ascending</SelectItem>
             </SelectContent>
           </Select>
         </div>
@@ -242,66 +322,66 @@ const UsersPage = () => {
           <Loader2 className="h-6 w-6 animate-spin" />
           <span className="text-sm">Loading users…</span>
         </div>
-      ) : filteredUsers.length === 0 ? (
+      ) : displayedUsers.length === 0 ? (
         <div className="rounded-xl border border-dashed border-white/20 bg-white/10 p-8 text-center text-sm text-white/60 backdrop-blur-lg">
           No users found.
         </div>
       ) : (
         <>
           <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
-            {paginatedUsers.map((user) => (
-            <div
-              key={user.id}
-              className="rounded-xl border border-white/20 bg-white/10 p-5 shadow-lg backdrop-blur-lg transition-all duration-300 hover:-translate-y-1 hover:shadow-2xl"
-            >
-              <div className="space-y-1.5">
-                <h3 className="text-lg font-semibold text-white">{user.name}</h3>
-                <p className="text-sm text-gray-300">{user.email}</p>
-              </div>
+            {displayedUsers.map((user) => (
+              <div
+                key={user.id}
+                className="rounded-xl border border-white/20 bg-white/10 p-5 shadow-lg backdrop-blur-lg transition-all duration-300 hover:-translate-y-1 hover:shadow-2xl"
+              >
+                <div className="space-y-1.5">
+                  <h3 className="text-lg font-semibold text-white">{user.name}</h3>
+                  <p className="text-sm text-gray-300">{user.email}</p>
+                </div>
 
-              <div className="mt-4 flex items-center gap-2">
-                <span className={`inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ${roleClasses[user.role]}`}>
-                  {user.role}
-                </span>
-                <span className={`inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ${statusClasses[user.status]}`}>
-                  {user.status}
-                </span>
-              </div>
+                <div className="mt-4 flex items-center gap-2">
+                  <span className={`inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ${roleClasses[user.role]}`}>
+                    {user.role}
+                  </span>
+                  <span className={`inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ${statusClasses[user.status]}`}>
+                    {user.status}
+                  </span>
+                </div>
 
-              <div className="mt-4 grid grid-cols-2 gap-2">
-                <Select value={user.role} onValueChange={(value) => void updateRole(user.id, value as ManagedUserRole)}>
-                  <SelectTrigger aria-label={`Change role for ${user.name}`} className="h-9 rounded-lg border border-white/20 bg-white/10 px-2.5 text-xs text-white backdrop-blur-lg hover:bg-white/10 data-[placeholder]:text-gray-300">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent className="border border-white/10 bg-slate-900 text-white">
-                    <SelectItem className="focus:bg-white/10 focus:text-white data-[state=checked]:bg-blue-500/20 data-[state=checked]:text-blue-200" value="Admin">Admin</SelectItem>
-                    <SelectItem className="focus:bg-white/10 focus:text-white data-[state=checked]:bg-blue-500/20 data-[state=checked]:text-blue-200" value="Sub Admin">Sub Admin</SelectItem>
-                    <SelectItem className="focus:bg-white/10 focus:text-white data-[state=checked]:bg-blue-500/20 data-[state=checked]:text-blue-200" value="Editor">Editor</SelectItem>
-                  </SelectContent>
-                </Select>
+                <div className="mt-4 grid grid-cols-2 gap-2">
+                  <Select value={user.role} onValueChange={(value) => void updateRole(user.id, value as ManagedUserRole)}>
+                    <SelectTrigger aria-label={`Change role for ${user.name}`} className="h-9 rounded-lg border border-white/20 bg-white/10 px-2.5 text-xs text-white backdrop-blur-lg hover:bg-white/10 data-[placeholder]:text-gray-300">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent className="border border-white/10 bg-slate-900 text-white">
+                      <SelectItem className="focus:bg-white/10 focus:text-white data-[state=checked]:bg-blue-500/20 data-[state=checked]:text-blue-200" value="Admin">Admin</SelectItem>
+                      <SelectItem className="focus:bg-white/10 focus:text-white data-[state=checked]:bg-blue-500/20 data-[state=checked]:text-blue-200" value="Sub Admin">Sub Admin</SelectItem>
+                      <SelectItem className="focus:bg-white/10 focus:text-white data-[state=checked]:bg-blue-500/20 data-[state=checked]:text-blue-200" value="Editor">Editor</SelectItem>
+                    </SelectContent>
+                  </Select>
 
-                <Button type="button" variant="outline" size="sm" onClick={() => void toggleStatus(user.id)}>
-                  {user.status === "Active" ? "Deactivate" : "Activate"}
-                </Button>
-              </div>
+                  <Button type="button" variant="outline" size="sm" onClick={() => void toggleStatus(user.id)}>
+                    {user.status === "Active" ? "Deactivate" : "Activate"}
+                  </Button>
+                </div>
 
-              <div className="mt-4 flex items-center gap-2">
-                <Button type="button" size="sm" variant="outline" onClick={() => openEdit(user)}>
-                  <Pencil className="h-4 w-4" />
-                  Edit
-                </Button>
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="outline"
-                  className="text-red-300 hover:text-red-200"
-                  onClick={() => setDeleteId(user.id)}
-                >
-                  <Trash2 className="h-4 w-4" />
-                  Delete
-                </Button>
+                <div className="mt-4 flex items-center gap-2">
+                  <Button type="button" size="sm" variant="outline" onClick={() => openEdit(user)}>
+                    <Pencil className="h-4 w-4" />
+                    Edit
+                  </Button>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    className="text-red-300 hover:text-red-200"
+                    onClick={() => setDeleteId(user.id)}
+                  >
+                    <Trash2 className="h-4 w-4" />
+                    Delete
+                  </Button>
+                </div>
               </div>
-            </div>
             ))}
           </div>
 
@@ -390,8 +470,8 @@ const UsersPage = () => {
               </Pagination>
               <div className="mt-3 text-center text-sm text-gray-400">
                 Showing{" "}
-                {Math.min((page - 1) * pageSize + 1, filteredUsers.length)}-
-                {Math.min(page * pageSize, filteredUsers.length)} of {filteredUsers.length}
+                {Math.min((page - 1) * pageSize + 1, totalItems)}-
+                {Math.min(page * pageSize, totalItems)} of {totalItems}
               </div>
             </div>
           ) : null}

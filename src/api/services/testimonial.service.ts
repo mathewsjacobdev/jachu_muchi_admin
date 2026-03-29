@@ -2,6 +2,7 @@ import { api, isApiRequestError } from "../client";
 import type { Testimonial } from "@/lib/testimonial-store";
 
 export const TESTIMONIALS_LIST_PATH = "/testimonials/all";
+export const TESTIMONIALS_FILTER_PATH = "/testimonials/filter";
 const TESTIMONIALS_BASE_PATH = "/testimonials";
 export const testimonialDetailPath = (id: string) => `${TESTIMONIALS_BASE_PATH}/${id}`;
 const testimonialDeleteFallbackPath = (id: string) => `/gallery/${id}`;
@@ -65,6 +66,56 @@ export const getTestimonials = async (): Promise<Testimonial[]> => {
   return list
     .filter((item): item is Record<string, unknown> => isRecord(item))
     .map((item) => rowToTestimonial(item));
+};
+
+export type TestimonialFilterSortBy = "createdAt" | "name" | "course";
+export type TestimonialFilterOrder = "asc" | "desc";
+
+export type TestimonialsFilterParams = {
+  page?: number;
+  limit?: number;
+  search?: string;
+  date?: string;
+  sortBy?: TestimonialFilterSortBy | string;
+  order?: TestimonialFilterOrder;
+  type?: string;
+};
+
+export type TestimonialsFilterResult = {
+  data: Testimonial[];
+  total: number;
+  page: number;
+  limit: number;
+};
+
+export const filterTestimonials = async (
+  params: TestimonialsFilterParams,
+  signal?: AbortSignal
+): Promise<TestimonialsFilterResult> => {
+  const q = new URLSearchParams();
+  if (params.page) q.set("page", String(params.page));
+  if (params.limit) q.set("limit", String(params.limit));
+  if (params.search?.trim()) q.set("search", params.search.trim());
+  if (params.date) q.set("date", params.date);
+  if (params.sortBy) if (params.date) q.set("date", params.date);
+  q.set("sortBy", params.sortBy);
+  if (params.order) q.set("order", params.order);
+  if (params.type && params.type !== "All") q.set("type", params.type);
+
+  const res = await api.get<{
+    success: boolean;
+    total: number;
+    page: number;
+    limit: number;
+    data: TestimonialApiRow[];
+  }>(`${TESTIMONIALS_FILTER_PATH}?${q.toString()}`, signal ? { signal } : undefined);
+
+  return {
+    data: Array.isArray(res.data.data) ? res.data.data.map(mapApiRowToTestimonial) : [],
+    total: res.data.total ?? 0,
+    page: res.data.page ?? params.page ?? 1,
+    limit: res.data.limit ?? params.limit ?? 10,
+  };
 };
 
 export const getTestimonialByIdApi = async (id: string): Promise<Testimonial | null> => {

@@ -15,7 +15,7 @@ import {
   PaginationNext,
   PaginationPrevious,
 } from "@/components/ui/pagination";
-import { deleteCourse, getCourses, type CourseListItem } from "@/api/services/course.service";
+import { deleteCourse, filterCourses, getCourses, type CourseListItem } from "@/api/services/course.service";
 
 const CARD_FALLBACK = "https://via.placeholder.com/400x200?text=Course";
 
@@ -97,8 +97,18 @@ const ProductsPage = () => {
 
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(9);
+  const [serverTotal, setServerTotal] = useState(0);
+  const [allCourses, setAllCourses] = useState<CourseListItem[] | null>(null);
 
-  const deferredSearch = useDeferredValue(search.trim().toLowerCase());
+  const [status, setStatus] = useState("all");
+  const [dateFilter, setDateFilter] = useState("");
+  const [order, setOrder] = useState<"asc" | "desc">("desc");
+
+  const deferredSearch = useDeferredValue(search.trim());
+
+  const hasFilter = deferredSearch !== "" || status !== "all" || dateFilter !== "" || order !== "desc";
+
+  useEffect(() => setPage(1), [deferredSearch, pageSize, status, dateFilter, order]);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -107,10 +117,32 @@ const ProductsPage = () => {
     (async () => {
       setLoading(true);
       try {
-        const data = await getCourses(controller.signal);
-        console.log({data});
-        
-        if (!cancelled) setCourses(data);
+        if (!hasFilter) {
+          // If we already have all courses, we don't strictly *need* to re-fetch on page change, 
+          // but calling the initial listing API ensures the data is up-to-date.
+          const data = await getCourses(controller.signal);
+          if (!cancelled) {
+            setAllCourses(data);
+            setServerTotal(data.length);
+          }
+        } else {
+          const data = await filterCourses(
+            {
+              page,
+              limit: pageSize,
+              search: deferredSearch || undefined,
+              status: status !== "all" ? status : undefined,
+              date: dateFilter || undefined,
+              order,
+            },
+            controller.signal
+          );
+          if (!cancelled) {
+            setAllCourses(null); // clear local cache since we are using server filter
+            setCourses(data.data);
+            setServerTotal(data.total);
+          }
+        }
       } catch (e) {
         if ((e as Error).name === "AbortError") return;
         if (!cancelled) console.error(e);
@@ -123,34 +155,18 @@ const ProductsPage = () => {
       cancelled = true;
       controller.abort();
     };
-  }, []);
+  }, [page, pageSize, deferredSearch, status, dateFilter, order, hasFilter]);
 
-  const filtered = useMemo(() => {
-    if (!deferredSearch) return courses;
-    return courses.filter((course) => {
-      const q = deferredSearch;
-      return (
-        course.courseName.toLowerCase().includes(q) ||
-        course.keyDetails.toLowerCase().includes(q) ||
-        course.type.toLowerCase().includes(q) ||
-        course.duration.toLowerCase().includes(q) ||
-        course.eligibility.toLowerCase().includes(q)
-      );
-    });
-  }, [courses, deferredSearch]);
+  const displayedCourses = useMemo(() => {
+    if (!hasFilter && allCourses) {
+      const start = (page - 1) * pageSize;
+      return allCourses.slice(start, start + pageSize);
+    }
+    return courses;
+  }, [hasFilter, allCourses, courses, page, pageSize]);
 
-  const totalPages = useMemo(() => {
-    const total = Math.ceil(filtered.length / pageSize);
-    return total > 0 ? total : 1;
-  }, [filtered.length, pageSize]);
-
-  useEffect(() => setPage(1), [deferredSearch, pageSize]);
-  useEffect(() => setPage((p) => Math.min(p, totalPages)), [totalPages]);
-
-  const paginatedCourses = useMemo(() => {
-    const start = (page - 1) * pageSize;
-    return filtered.slice(start, start + pageSize);
-  }, [filtered, page, pageSize]);
+  const totalCourses = hasFilter ? serverTotal : (allCourses?.length ?? 0);
+  const totalPages = Math.ceil(totalCourses / pageSize) || 1;
 
   const onEdit = useCallback(
     (id: string) => {
@@ -200,47 +216,61 @@ const ProductsPage = () => {
       />
 
       <div className="mb-4 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-        <div className="max-w-xs">
-          <div className="relative">
+        <div className="flex flex-1 flex-col gap-3 md:flex-row md:items-center">
+          <div className="relative w-full max-w-xs md:max-w-sm">
             <Search className="absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-blue-400" />
             <Input
               placeholder="Search courses…"
-              className="pl-8"
+              className="pl-8 w-full"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               autoComplete="off"
             />
           </div>
-        </div>
-{/* 
-        <div className="flex w-full items-center justify-end md:w-auto">
-          <Select value={String(pageSize)} onValueChange={(value) => setPageSize(Number(value))}>
-            <SelectTrigger className="h-10 w-full rounded-lg border border-white/20 bg-white/10 text-white backdrop-blur-lg hover:bg-white/10 data-[placeholder]:text-gray-300 sm:w-44">
-              <SelectValue />
+
+          <Select value={status} onValueChange={setStatus}>
+            <SelectTrigger className="w-full md:w-[140px] h-10 rounded-lg border border-white/20 bg-white/10 text-white backdrop-blur-lg hover:bg-white/10 data-[placeholder]:text-gray-300">
+              <SelectValue placeholder="Status" />
             </SelectTrigger>
             <SelectContent className="border border-white/10 bg-slate-900 text-white">
-              {[6, 9, 12].map((size) => (
-                <SelectItem
-                  key={size}
-                  value={String(size)}
-                  className="focus:bg-white/10 focus:text-white data-[state=checked]:bg-blue-500/20 data-[state=checked]:text-blue-200"
-                >
-                  {size}/page
-                </SelectItem>
-              ))}
+              <SelectItem value="all" className="focus:bg-white/10 focus:text-white data-[state=checked]:bg-blue-500/20 data-[state=checked]:text-blue-200">All Status</SelectItem>
+              <SelectItem value="Active" className="focus:bg-white/10 focus:text-white data-[state=checked]:bg-blue-500/20 data-[state=checked]:text-blue-200">Active</SelectItem>
+              <SelectItem value="Inactive" className="focus:bg-white/10 focus:text-white data-[state=checked]:bg-blue-500/20 data-[state=checked]:text-blue-200">Inactive</SelectItem>
             </SelectContent>
           </Select>
-        </div> */}
+
+          <div className="w-full min-w-[140px]">
+              <input
+                type="date"
+                value={dateFilter}
+                onChange={(e) => {
+                  setPage(1);
+                  setDateFilter(e.target.value);
+                }}
+                className="h-10 w-full rounded-lg border border-white/20 bg-white/10 px-3 flex items-center text-sm text-white backdrop-blur-lg hover:bg-white/15 focus:outline-none focus:ring-2 focus:ring-blue-500 [color-scheme:dark]"
+              />
+            </div>
+
+          <Select value={order} onValueChange={(val: "asc" | "desc") => setOrder(val)}>
+            <SelectTrigger className="w-full md:w-[140px] h-10 rounded-lg border border-white/20 bg-white/10 text-white backdrop-blur-lg hover:bg-white/10 data-[placeholder]:text-gray-300">
+              <SelectValue placeholder="Order" />
+            </SelectTrigger>
+            <SelectContent className="border border-white/10 bg-slate-900 text-white">
+              <SelectItem value="desc" className="focus:bg-white/10 focus:text-white data-[state=checked]:bg-blue-500/20 data-[state=checked]:text-blue-200">Descending</SelectItem>
+              <SelectItem value="asc" className="focus:bg-white/10 focus:text-white data-[state=checked]:bg-blue-500/20 data-[state=checked]:text-blue-200">Ascending</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
       </div>
 
-      {filtered.length === 0 ? (
+      {displayedCourses.length === 0 ? (
         <div className="rounded-xl border border-white/20 bg-white/10 p-8 text-center text-sm text-white/50 backdrop-blur-lg">
           No courses found
         </div>
       ) : (
         <>
           <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
-            {paginatedCourses.map((course) => (
+            {displayedCourses.map((course) => (
             <CourseCard
               key={course.id}
               course={course}
@@ -342,8 +372,8 @@ const ProductsPage = () => {
 
               <div className="mt-3 text-center text-sm text-gray-400">
                 Showing{" "}
-                {Math.min((page - 1) * pageSize + 1, filtered.length)}-
-                {Math.min(page * pageSize, filtered.length)} of {filtered.length}
+                {Math.min((page - 1) * pageSize + 1, totalCourses)}-
+                {Math.min(page * pageSize, totalCourses)} of {totalCourses}
               </div>
             </div>
           ) : null}
