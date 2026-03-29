@@ -257,63 +257,71 @@ const UsersPage = () => {
         )}
       />
 
-      <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-        <div className="flex flex-1 flex-col gap-3 md:flex-row md:items-center flex-wrap">
-          <div className="relative w-full max-w-sm">
-            <Search className="absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-blue-400" />
+      <div className="flex flex-col gap-4 rounded-xl border border-white/20 bg-white/10 p-4 shadow-lg backdrop-blur-lg transition-all duration-300 hover:shadow-2xl sm:p-5">
+        <div className="flex flex-wrap items-center gap-3">
+          <div className="relative min-w-[280px] flex-1">
+            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
             <Input
-              placeholder="Search users..."
-              className="pl-8 w-full"
+              placeholder="Search users…"
+              className="h-10 w-full pl-9 pr-4 text-sm"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               autoComplete="off"
             />
           </div>
 
-          <Select value={statusFilter} onValueChange={setStatusFilter}>
-            <SelectTrigger className="w-full md:w-[130px] h-10 rounded-lg border border-white/20 bg-white/10 text-white backdrop-blur-lg hover:bg-white/10 data-[placeholder]:text-gray-300">
-              <SelectValue placeholder="Status" />
-            </SelectTrigger>
-            <SelectContent className="border border-white/10 bg-slate-900 text-white">
-              <SelectItem value="All" className="focus:bg-white/10 focus:text-white data-[state=checked]:bg-blue-500/20 data-[state=checked]:text-blue-200">All Status</SelectItem>
-              <SelectItem value="Active" className="focus:bg-white/10 focus:text-white data-[state=checked]:bg-blue-500/20 data-[state=checked]:text-blue-200">Active</SelectItem>
-              <SelectItem value="Inactive" className="focus:bg-white/10 focus:text-white data-[state=checked]:bg-blue-500/20 data-[state=checked]:text-blue-200">Inactive</SelectItem>
-            </SelectContent>
-          </Select>
+          <div className="flex flex-wrap items-center gap-3">
+            <div className="w-[140px]">
+              <Select value={statusFilter} onValueChange={setStatusFilter}>
+                <SelectTrigger className="h-10 w-full rounded-lg border border-white/20 bg-white/10 text-white backdrop-blur-lg hover:bg-white/10 data-[placeholder]:text-gray-300">
+                  <SelectValue placeholder="Status" />
+                </SelectTrigger>
+                <SelectContent className="border border-white/10 bg-slate-900 text-white">
+                  <SelectItem value="All" className="focus:bg-white/10 focus:text-white data-[state=checked]:bg-blue-500/20 data-[state=checked]:text-blue-200">All Status</SelectItem>
+                  <SelectItem value="Active" className="focus:bg-white/10 focus:text-white data-[state=checked]:bg-blue-500/20 data-[state=checked]:text-blue-200">Active</SelectItem>
+                  <SelectItem value="Inactive" className="focus:bg-white/10 focus:text-white data-[state=checked]:bg-blue-500/20 data-[state=checked]:text-blue-200">Inactive</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
 
-          <Select value={roleFilter} onValueChange={setRoleFilter}>
-            <SelectTrigger className="w-full md:w-[130px] h-10 rounded-lg border border-white/20 bg-white/10 text-white backdrop-blur-lg hover:bg-white/10 data-[placeholder]:text-gray-300">
-              <SelectValue placeholder="Role" />
-            </SelectTrigger>
-            <SelectContent className="border border-white/10 bg-slate-900 text-white">
-              <SelectItem value="All" className="focus:bg-white/10 focus:text-white data-[state=checked]:bg-blue-500/20 data-[state=checked]:text-blue-200">All Roles</SelectItem>
-              <SelectItem value="Admin" className="focus:bg-white/10 focus:text-white data-[state=checked]:bg-blue-500/20 data-[state=checked]:text-blue-200">Admin</SelectItem>
-              <SelectItem value="Sub Admin" className="focus:bg-white/10 focus:text-white data-[state=checked]:bg-blue-500/20 data-[state=checked]:text-blue-200">Sub Admin</SelectItem>
-              <SelectItem value="Editor" className="focus:bg-white/10 focus:text-white data-[state=checked]:bg-blue-500/20 data-[state=checked]:text-blue-200">Editor</SelectItem>
-            </SelectContent>
-          </Select>
+            <div className="w-[140px]">
+              <Select value={roleFilter} onValueChange={setRoleFilter}>
+                <SelectTrigger className="h-10 w-full rounded-lg border border-white/20 bg-white/10 text-white backdrop-blur-lg hover:bg-white/10 data-[placeholder]:text-gray-300">
+                  <SelectValue placeholder="Role" />
+                </SelectTrigger>
+                <SelectContent className="border border-white/10 bg-slate-900 text-white">
+                  <SelectItem value="All" className="focus:bg-white/10 focus:text-white data-[state=checked]:bg-blue-500/20 data-[state=checked]:text-blue-200">All Roles</SelectItem>
+                  <SelectItem value="Admin" className="focus:bg-white/10 focus:text-white data-[state=checked]:bg-blue-500/20 data-[state=checked]:text-blue-200">Admin</SelectItem>
+                  <SelectItem value="Sub Admin" className="focus:bg-white/10 focus:text-white data-[state=checked]:bg-blue-500/20 data-[state=checked]:text-blue-200">Sub Admin</SelectItem>
+                  <SelectItem value="Editor" className="focus:bg-white/10 focus:text-white data-[state=checked]:bg-blue-500/20 data-[state=checked]:text-blue-200">Editor</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
 
-          <div className="w-full min-w-[140px]">
-            <input
-              type="date"
-              value={dateFilter}
-              onChange={(e) => {
-                setPage(1);
-                setDateFilter(e.target.value);
-              }}
-              className="h-10 w-full rounded-lg border border-white/20 bg-white/10 px-3 flex items-center text-sm text-white backdrop-blur-lg hover:bg-white/15 focus:outline-none focus:ring-2 focus:ring-blue-500 [color-scheme:dark]"
-            />
+            <div className="w-[150px]">
+              <input
+                type="date"
+                value={dateFilter}
+                onChange={(e) => {
+                  setPage(1);
+                  setDateFilter(e.target.value);
+                }}
+                className="h-10 w-full rounded-lg border border-white/20 bg-white/10 px-3 flex items-center text-sm text-white backdrop-blur-lg hover:bg-white/15 focus:outline-none focus:ring-1 focus:ring-blue-500 [color-scheme:dark]"
+              />
+            </div>
+
+            <div className="w-[130px]">
+              <Select value={order} onValueChange={(val: "asc" | "desc") => setOrder(val)}>
+                <SelectTrigger className="h-10 w-full rounded-lg border border-white/20 bg-white/10 text-white backdrop-blur-lg hover:bg-white/10 data-[placeholder]:text-gray-300">
+                  <SelectValue placeholder="Order" />
+                </SelectTrigger>
+                <SelectContent className="border border-white/10 bg-slate-900 text-white">
+                  <SelectItem value="desc" className="focus:bg-white/10 focus:text-white data-[state=checked]:bg-blue-500/20 data-[state=checked]:text-blue-200">Descending</SelectItem>
+                  <SelectItem value="asc" className="focus:bg-white/10 focus:text-white data-[state=checked]:bg-blue-500/20 data-[state=checked]:text-blue-200">Ascending</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
           </div>
-
-          <Select value={order} onValueChange={(val: "asc" | "desc") => setOrder(val)}>
-            <SelectTrigger className="w-full md:w-[130px] h-10 rounded-lg border border-white/20 bg-white/10 text-white backdrop-blur-lg hover:bg-white/10 data-[placeholder]:text-gray-300">
-              <SelectValue placeholder="Order" />
-            </SelectTrigger>
-            <SelectContent className="border border-white/10 bg-slate-900 text-white">
-              <SelectItem value="desc" className="focus:bg-white/10 focus:text-white data-[state=checked]:bg-blue-500/20 data-[state=checked]:text-blue-200">Descending</SelectItem>
-              <SelectItem value="asc" className="focus:bg-white/10 focus:text-white data-[state=checked]:bg-blue-500/20 data-[state=checked]:text-blue-200">Ascending</SelectItem>
-            </SelectContent>
-          </Select>
         </div>
       </div>
 

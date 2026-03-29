@@ -99,7 +99,7 @@ export const createGalleryItem = async (
   const formData = new FormData();
   formData.append("title", payload.title);
   formData.append("category", payload.category);
-  formData.append("image", payload.imageFile);
+  formData.append("galleryImage", payload.imageFile);
 
   const res = await api.post<{ data: Record<string, unknown> }>(GALLERY_PATH, formData);
   return rowToGalleryItem(res.data.data);
@@ -113,7 +113,7 @@ export const updateGalleryItemApi = async (
   formData.append("title", payload.title);
   formData.append("category", payload.category);
   if (payload.imageFile) {
-    formData.append("image", payload.imageFile);
+    formData.append("galleryImage", payload.imageFile);
   }
 
   const res = await api.put<{ data: Record<string, unknown> }>(galleryItemPath(id), formData);
