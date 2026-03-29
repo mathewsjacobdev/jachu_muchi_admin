@@ -259,22 +259,22 @@ const EnquiriesPage = () => {
         description="Track, prioritize, and convert customer enquiries from one place."
       />
 
-      <div className="rounded-xl border border-white/20 bg-white/10 p-3 shadow-lg backdrop-blur-lg transition-all duration-300 hover:scale-[1.02] hover:shadow-2xl sm:p-4 md:p-5">
-        <div className="flex flex-col gap-3">
-          <div className="relative w-full sm:max-w-md">
-            <Search className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-300" />
+      <div className="flex flex-col gap-4 rounded-xl border border-white/20 bg-white/10 p-4 shadow-lg backdrop-blur-lg transition-all duration-300 hover:shadow-2xl sm:p-5">
+        <div className="flex flex-wrap items-center gap-3">
+          <div className="relative min-w-[280px] flex-1">
+            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
             <input
               type="search"
               value={search}
               onChange={(event) => setSearch(event.target.value)}
-              placeholder="Search by name, phone, email, type or message..."
+              placeholder="Search enquiries…"
               autoComplete="off"
-              className="h-10 w-full rounded-lg border border-white/20 bg-white/10 pl-11 pr-4 text-sm text-gray-100 shadow-sm backdrop-blur-lg transition-all duration-200 placeholder:text-gray-400 hover:bg-white/15 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="h-10 w-full rounded-lg border border-white/20 bg-white/10 pl-9 pr-4 text-sm text-gray-100 shadow-sm backdrop-blur-lg transition-all duration-200 placeholder:text-gray-400 hover:bg-white/15 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
             />
           </div>
 
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
-            <div className="w-full min-w-0">
+          <div className="flex flex-wrap items-center gap-3">
+            <div className="w-[140px]">
               <Select
                 value={statusFilter}
                 onValueChange={(value) => {
@@ -286,10 +286,7 @@ const EnquiriesPage = () => {
                   <SelectValue placeholder="Status" />
                 </SelectTrigger>
                 <SelectContent className="border border-white/10 bg-slate-900 text-white">
-                  <SelectItem
-                    className="focus:bg-white/10 focus:text-white data-[state=checked]:bg-blue-500/20 data-[state=checked]:text-blue-200"
-                    value="All"
-                  >
+                  <SelectItem className="focus:bg-white/10 focus:text-white data-[state=checked]:bg-blue-500/20 data-[state=checked]:text-blue-200" value="All">
                     All Status
                   </SelectItem>
                   {STATUS_OPTIONS.map((status) => (
@@ -305,7 +302,7 @@ const EnquiriesPage = () => {
               </Select>
             </div>
 
-            <div className="w-full min-w-0">
+            <div className="w-[140px]">
               <Select
                 value={typeFilter}
                 onValueChange={(value) => {
@@ -330,7 +327,7 @@ const EnquiriesPage = () => {
               </Select>
             </div>
 
-            <div className="w-full min-w-[140px]">
+            <div className="w-[150px]">
               <input
                 type="date"
                 value={dateFilter}
@@ -338,11 +335,11 @@ const EnquiriesPage = () => {
                   setPage(1);
                   setDateFilter(e.target.value);
                 }}
-                className="h-10 w-full rounded-lg border border-white/20 bg-white/10 px-3 flex items-center text-sm text-white backdrop-blur-lg hover:bg-white/15 focus:outline-none focus:ring-2 focus:ring-blue-500 [color-scheme:dark]"
+                className="h-10 w-full rounded-lg border border-white/20 bg-white/10 px-3 text-sm text-white backdrop-blur-lg hover:bg-white/15 focus:outline-none focus:ring-1 focus:ring-blue-500 [color-scheme:dark]"
               />
             </div>
 
-            <div className="w-full min-w-0">
+            <div className="w-[130px]">
               <Select
                 value={order}
                 onValueChange={(value) => {
