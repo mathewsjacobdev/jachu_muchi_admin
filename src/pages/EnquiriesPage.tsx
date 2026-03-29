@@ -7,6 +7,7 @@ import { ResponsiveTable, type ResponsiveTableColumn } from "@/components/ui/Res
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import {
   deleteEnquiry,
+  getEnquiries,
   getEnquiriesFilter,
   type Enquiry,
   type EnquiryFilterOrder,
@@ -24,10 +25,7 @@ const STATUS_OPTIONS: EnquiryStatus[] = [
   "Closed",
 ];
 
-const SORT_BY_OPTIONS: { value: EnquiryFilterSortBy; label: string }[] = [
-  { value: "date", label: "Date" },
-  { value: "name", label: "Name" },
-];
+
 
 const ORDER_OPTIONS: { value: EnquiryFilterOrder; label: string }[] = [
   { value: "asc", label: "Ascending" },
@@ -66,35 +64,55 @@ const EnquiriesPage = () => {
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<"All" | EnquiryStatus>("All");
   const [typeFilter, setTypeFilter] = useState<"All" | EnquiryType>("All");
-  const [sortBy, setSortBy] = useState<EnquiryFilterSortBy>("date");
+  const [dateFilter, setDateFilter] = useState("");
   const [order, setOrder] = useState<EnquiryFilterOrder>("desc");
   const [isLoading, setIsLoading] = useState(true);
   const [deleteId, setDeleteId] = useState<string | null>(null);
 
+  const [allEnquiries, setAllEnquiries] = useState<Enquiry[] | null>(null);
+
   const deferredSearch = useDeferredValue(search.trim());
+
+  const hasFilter = deferredSearch !== "" || statusFilter !== "All" || typeFilter !== "All" || dateFilter !== "" || order !== "desc";
 
   const loadEnquiries = useCallback(async () => {
     setIsLoading(true);
     try {
-      const result = await getEnquiriesFilter({
-        page,
-        limit: PAGE_SIZE,
-        search: deferredSearch || undefined,
-        status: statusFilter,
-        type: typeFilter,
-        sortBy,
-        order,
-      });
-      setEnquiries(result.data);
-      setTotal(result.total);
+      if (!hasFilter) {
+        const data = await getEnquiries();
+        setAllEnquiries(data);
+        setTotal(data.length);
+      } else {
+        const result = await getEnquiriesFilter({
+          page,
+          limit: PAGE_SIZE,
+          search: deferredSearch || undefined,
+          status: statusFilter,
+          type: typeFilter,
+          date: dateFilter || undefined,
+          order,
+        });
+        setAllEnquiries(null);
+        setEnquiries(result.data);
+        setTotal(result.total);
+      }
     } catch (err) {
       console.error(err);
       setEnquiries([]);
+      setAllEnquiries(null);
       setTotal(0);
     } finally {
       setIsLoading(false);
     }
-  }, [page, deferredSearch, statusFilter, typeFilter, sortBy, order]);
+  }, [page, deferredSearch, statusFilter, typeFilter, dateFilter, order, hasFilter]);
+
+  const displayedEnquiries = useMemo(() => {
+    if (!hasFilter && allEnquiries) {
+      const start = (page - 1) * PAGE_SIZE;
+      return allEnquiries.slice(start, start + PAGE_SIZE);
+    }
+    return enquiries;
+  }, [hasFilter, allEnquiries, enquiries, page]);
 
   useEffect(() => {
     void loadEnquiries();
@@ -113,6 +131,11 @@ const EnquiriesPage = () => {
       setEnquiries((prev) =>
         prev.map((enquiry) => (enquiry.id === enquiryId ? { ...enquiry, status: nextStatus } : enquiry)),
       );
+      if (allEnquiries) {
+        setAllEnquiries((prev) =>
+          (prev ?? []).map((enquiry) => (enquiry.id === enquiryId ? { ...enquiry, status: nextStatus } : enquiry)),
+        );
+      }
       try {
         await updateEnquiryStatus(enquiryId, nextStatus);
         await loadEnquiries();
@@ -307,29 +330,16 @@ const EnquiriesPage = () => {
               </Select>
             </div>
 
-            <div className="w-full min-w-0">
-              <Select
-                value={sortBy}
-                onValueChange={(value) => {
+            <div className="w-full min-w-[140px]">
+              <input
+                type="date"
+                value={dateFilter}
+                onChange={(e) => {
                   setPage(1);
-                  setSortBy(value as EnquiryFilterSortBy);
+                  setDateFilter(e.target.value);
                 }}
-              >
-                <SelectTrigger className={selectTriggerClass}>
-                  <SelectValue placeholder="Sort by" />
-                </SelectTrigger>
-                <SelectContent className="border border-white/10 bg-slate-900 text-white">
-                  {SORT_BY_OPTIONS.map((opt) => (
-                    <SelectItem
-                      key={opt.value}
-                      className="focus:bg-white/10 focus:text-white data-[state=checked]:bg-blue-500/20 data-[state=checked]:text-blue-200"
-                      value={opt.value}
-                    >
-                      {opt.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+                className="h-10 w-full rounded-lg border border-white/20 bg-white/10 px-3 flex items-center text-sm text-white backdrop-blur-lg hover:bg-white/15 focus:outline-none focus:ring-2 focus:ring-blue-500 [color-scheme:dark]"
+              />
             </div>
 
             <div className="w-full min-w-0">
@@ -378,7 +388,7 @@ const EnquiriesPage = () => {
             </div>
           </div>
         </>
-      ) : enquiries.length === 0 ? (
+      ) : displayedEnquiries.length === 0 ? (
         <>
           <div className="hidden md:block p-8 text-center text-sm text-white/50">
             No enquiries found
@@ -392,7 +402,7 @@ const EnquiriesPage = () => {
         </>
       ) : (
         <ResponsiveTable
-          data={enquiries}
+          data={displayedEnquiries}
           columns={columns}
           renderActions={renderActions}
         />

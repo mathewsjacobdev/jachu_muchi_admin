@@ -21,6 +21,7 @@ export type EnquiriesFilterParams = {
   search?: string;
   status?: EnquiryStatus | "All";
   type?: EnquiryType | "All";
+  date?: string;
   sortBy?: EnquiryFilterSortBy;
   order?: EnquiryFilterOrder;
 };
@@ -111,6 +112,7 @@ const buildEnquiriesFilterQuery = (params: EnquiriesFilterParams): string => {
   if (search) q.set("search", search);
   if (params.status && params.status !== "All") q.set("status", params.status);
   if (params.type && params.type !== "All") q.set("type", params.type);
+  if (params.date) q.set("date", params.date);
   q.set("sortBy", params.sortBy?.trim() || "date");
   if (params.order) q.set("order", params.order);
   return `${ENQUIRIES_FILTER_PATH}?${q.toString()}`;

@@ -100,6 +100,53 @@ export const getCourses = async (signal?: AbortSignal): Promise<CourseListItem[]
   return mapCoursesResponse(res.data);
 };
 
+export type FilterCoursesParams = {
+  page?: number;
+  limit?: number;
+  search?: string;
+  status?: string;
+  type?: string;
+  date?: string;
+  sortBy?: string;
+  order?: "asc" | "desc";
+};
+
+export type FilterCoursesResponse = {
+  success: boolean;
+  total: number;
+  page: number;
+  limit: number;
+  data: CourseListItem[];
+};
+
+export const filterCourses = async (params: FilterCoursesParams, signal?: AbortSignal): Promise<FilterCoursesResponse> => {
+  const query = new URLSearchParams();
+  if (params.page) query.append("page", params.page.toString());
+  if (params.limit) query.append("limit", params.limit.toString());
+  if (params.search) query.append("search", params.search);
+  if (params.status && params.status !== "all") query.append("status", params.status);
+  if (params.type && params.type !== "all") query.append("type", params.type);
+  if (params.sortBy) query.append("sortBy", params.sortBy);
+  if (params.order) query.append("order", params.order);
+
+  const url = `${COURSES_BASE_PATH}/filter?${query.toString()}`;
+  const res = await api.get<{
+    success: boolean;
+    total: number;
+    page: number;
+    limit: number;
+    data: CourseListApiRow[];
+  }>(url, signal ? { signal } : undefined);
+
+  return {
+    success: res.data.success,
+    total: res.data.total ?? 0,
+    page: res.data.page ?? params.page ?? 1,
+    limit: res.data.limit ?? params.limit ?? 10,
+    data: Array.isArray(res.data.data) ? res.data.data.map(mapListRowToUi) : [],
+  };
+};
+
 export type CourseFormState = {
   courseName: string;
   type: string;

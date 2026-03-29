@@ -4,11 +4,11 @@ import type { NewsItem } from "@/types";
 export const NEWS_LIST_PATH = "/articles/all";
 export const ARTICLES_FILTER_PATH = "/articles/filter";
 export const NEWS_STATS_PATH = "/articles/stats";
-/** POST create — backend may keep singular; change if your API uses POST /articles */
-const ARTICLE_CREATE_PATH = "/article";
+/** POST create — backend uses plural /articles */
+const ARTICLE_CREATE_PATH = "/articles";
 /** GET/PUT/DELETE single article — backend uses plural /articles/:id */
 export const newsDetailPath = (id: string) => `/articles/${id}`;
-const articleAltDetailPath = (id: string) => `/article/${id}`;
+const articleAltDetailPath = (id: string) => `/articles/${id}`;
 
 type ArticleStatus = NewsItem["status"];
 
@@ -33,6 +33,7 @@ export type ArticlesFilterParams = {
   search?: string;
   status?: ArticleStatus | "All";
   type?: string;
+  date?: string;
   sortBy?: ArticleFilterSortBy;
   order?: ArticleFilterOrder;
 };
@@ -120,6 +121,7 @@ const buildArticlesFilterQuery = (params: ArticlesFilterParams): string => {
   if (params.status && params.status !== "All") q.set("status", params.status);
   const type = params.type?.trim();
   if (type) q.set("type", type);
+  if (params.date) q.set("date", params.date);
   q.set("sortBy", (params.sortBy ?? "createdAt").trim());
   q.set("order", params.order === "asc" ? "asc" : "desc");
   return `${ARTICLES_FILTER_PATH}?${q.toString()}`;

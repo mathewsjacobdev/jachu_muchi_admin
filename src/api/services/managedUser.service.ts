@@ -13,6 +13,7 @@ export interface ManagedUser {
 
 const USERS_LIST_PATH = "/users/all";
 const USERS_PATH = "/users";
+export const USERS_FILTER_PATH = "/users/filter";
 export const managedUserDetailPath = (id: string) => `/users/${id}`;
 
 type BackendUserRow = {
@@ -81,7 +82,66 @@ export const getManagedUsers = async (): Promise<ManagedUser[]> => {
   }
   return list
     .filter((item): item is Record<string, unknown> => isRecord(item))
+    .filter((item): item is Record<string, unknown> => isRecord(item))
     .map((item) => rowToManaged(item));
+};
+
+export type ManagedUserFilterSortBy = "createdAt" | "name" | "email";
+export type ManagedUserFilterOrder = "asc" | "desc";
+
+export type ManagedUserFilterParams = {
+  page?: number;
+  limit?: number;
+  search?: string;
+  status?: string;
+  type?: string;
+  date?: string;
+  sortBy?: ManagedUserFilterSortBy | string;
+  order?: ManagedUserFilterOrder;
+};
+
+export type ManagedUserFilterResult = {
+  data: ManagedUser[];
+  total: number;
+  page: number;
+  limit: number;
+};
+
+export const filterManagedUsers = async (
+  params: ManagedUserFilterParams,
+  signal?: AbortSignal
+): Promise<ManagedUserFilterResult> => {
+  const q = new URLSearchParams();
+  if (params.page) q.set("page", String(params.page));
+  if (params.limit) q.set("limit", String(params.limit));
+  if (params.search?.trim()) q.set("search", params.search.trim());
+  if (params.status && params.status !== "All") q.set("status", params.status);
+  if (params.type && params.type !== "All") q.set("type", params.type);
+  if (params.date) q.set("date", params.date);
+  if (params.sortBy) if (params.date) q.set("date", params.date);
+  q.set("sortBy", params.sortBy);
+  if (params.order) q.set("order", params.order);
+
+  const res = await api.get<{
+    success: boolean;
+    data: unknown;
+    pagination?: { total: number; page: number; pages: number };
+  }>(`${USERS_FILTER_PATH}?${q.toString()}`, signal ? { signal } : undefined);
+
+  let parsed: ManagedUser[] = [];
+  const list = res.data?.data;
+  if (Array.isArray(list)) {
+    parsed = list
+      .filter((item): item is Record<string, unknown> => isRecord(item))
+      .map((item) => rowToManaged(item));
+  }
+
+  return {
+    data: parsed,
+    total: res.data?.pagination?.total ?? 0,
+    page: res.data?.pagination?.page ?? params.page ?? 1,
+    limit: params.limit ?? 10,
+  };
 };
 
 export const createManagedUser = async (

@@ -2,6 +2,7 @@ import { api } from "../client";
 import type { Branch, BranchStatus } from "@/lib/branch-store";
 
 export const BRANCHES_LIST_PATH = "/branches/all";
+export const BRANCHES_FILTER_PATH = "/branches/filter";
 const BRANCHES_BASE_PATH = "/branches";
 export const branchDetailPath = (id: string) => `${BRANCHES_BASE_PATH}/${id}`;
 
@@ -81,6 +82,52 @@ export const getBranches = async (): Promise<Branch[]> => {
   return list
     .filter((item): item is Record<string, unknown> => isRecord(item))
     .map((item) => rowToBranch(item));
+};
+
+export type BranchFilterSortBy = "createdAt" | "name" | "email";
+export type BranchFilterOrder = "asc" | "desc";
+
+export type BranchFilterParams = {
+  page?: number;
+  limit?: number;
+  search?: string;
+  date?: string;
+  sortBy?: BranchFilterSortBy | string;
+  order?: BranchFilterOrder;
+};
+
+export type BranchFilterResult = {
+  data: Branch[];
+  total: number;
+  page: number;
+  limit: number;
+};
+
+export const filterBranches = async (
+  params: BranchFilterParams,
+  signal?: AbortSignal
+): Promise<BranchFilterResult> => {
+  const q = new URLSearchParams();
+  if (params.page) q.set("page", String(params.page));
+  if (params.limit) q.set("limit", String(params.limit));
+  if (params.search?.trim()) q.set("search", params.search.trim());
+  if (params.date) q.set("date", params.date);
+  if (params.sortBy) if (params.date) q.set("date", params.date);
+  q.set("sortBy", params.sortBy);
+  if (params.order) q.set("order", params.order);
+
+  const res = await api.get<{
+    success: boolean;
+    data: BranchApiRow[];
+    pagination?: { total: number; page: number; pages: number };
+  }>(`${BRANCHES_FILTER_PATH}?${q.toString()}`, signal ? { signal } : undefined);
+
+  return {
+    data: Array.isArray(res.data.data) ? res.data.data.map(mapApiRowToBranch) : [],
+    total: res.data.pagination?.total ?? 0,
+    page: res.data.pagination?.page ?? params.page ?? 1,
+    limit: params.limit ?? 10,
+  };
 };
 
 export const getBranchById = async (id: string): Promise<Branch | null> => {

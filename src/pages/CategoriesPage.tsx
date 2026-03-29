@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useState } from "react";
-import { Loader2, Plus, Pencil, Trash2 } from "lucide-react";
+import { useEffect, useMemo, useState, useDeferredValue } from "react";
+import { Loader2, Plus, Pencil, Trash2, Search } from "lucide-react";
 import type { Category } from "@/types";
 import PageHeader from "@/components/shared/PageHeader";
 import DeleteModal from "@/components/shared/DeleteModal";
@@ -20,12 +20,16 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import {
   createCategory,
   deleteCategoryApi,
+  filterCategories,
   getCategories,
   updateCategoryApi,
 } from "@/api/services/category.service";
 
 const CategoriesPage = () => {
   const [categories, setCategories] = useState<Category[]>([]);
+  const [allCategories, setAllCategories] = useState<Category[] | null>(null);
+  const [serverTotal, setServerTotal] = useState(0);
+
   const [isLoading, setIsLoading] = useState(true);
   const [formOpen, setFormOpen] = useState(false);
   const [editing, setEditing] = useState<Category | null>(null);
@@ -37,33 +41,71 @@ const CategoriesPage = () => {
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(9);
 
+  const [search, setSearch] = useState("");
+  const deferredSearch = useDeferredValue(search.trim());
+
+  const [dateFilter, setDateFilter] = useState("");
+  const [order, setOrder] = useState<"asc" | "desc">("desc");
+
+  const hasFilter = deferredSearch !== "" || dateFilter !== "" || order !== "desc";
+
+  useEffect(() => setPage(1), [deferredSearch, pageSize, dateFilter, order]);
+
   useEffect(() => {
+    let cancelled = false;
+    const controller = new AbortController();
+
     const load = async () => {
       setIsLoading(true);
       try {
-        setCategories(await getCategories());
+        if (!hasFilter) {
+          const data = await getCategories();
+          if (!cancelled) {
+            setAllCategories(data);
+            setServerTotal(data.length);
+          }
+        } else {
+          const data = await filterCategories(
+            {
+              page,
+              limit: pageSize,
+              search: deferredSearch || undefined,
+              date: dateFilter || undefined,
+              order,
+            },
+            controller.signal
+          );
+          if (!cancelled) {
+            setAllCategories(null);
+            setCategories(data.data);
+            setServerTotal(data.total);
+          }
+        }
       } catch (e) {
-        console.error(e);
+        if ((e as Error).name === "AbortError") return;
+        if (!cancelled) console.error(e);
       } finally {
-        setIsLoading(false);
+        if (!cancelled) setIsLoading(false);
       }
     };
     void load();
-  }, []);
 
-  const totalPages = useMemo(() => {
-    const total = Math.ceil(categories.length / pageSize);
-    return total > 0 ? total : 1;
-  }, [categories.length, pageSize]);
+    return () => {
+      cancelled = true;
+      controller.abort();
+    };
+  }, [page, pageSize, deferredSearch, dateFilter, order, hasFilter]);
 
-  useEffect(() => {
-    setPage((p) => Math.min(p, totalPages));
-  }, [totalPages]);
+  const displayedCategories = useMemo(() => {
+    if (!hasFilter && allCategories) {
+      const start = (page - 1) * pageSize;
+      return allCategories.slice(start, start + pageSize);
+    }
+    return categories;
+  }, [hasFilter, allCategories, categories, page, pageSize]);
 
-  const paginatedCategories = useMemo(() => {
-    const start = (page - 1) * pageSize;
-    return categories.slice(start, start + pageSize);
-  }, [categories, page, pageSize]);
+  const totalItems = hasFilter ? serverTotal : (allCategories?.length ?? 0);
+  const totalPages = Math.ceil(totalItems / pageSize) || 1;
 
   const openAdd = () => {
     setEditing(null);
@@ -98,7 +140,11 @@ const CategoriesPage = () => {
         );
       } else {
         const created = await createCategory({ name: name.trim(), productCount: safeProductCount });
+        if (allCategories) {
+          setAllCategories((prev) => [created, ...(prev ?? [])]);
+        }
         setCategories((prev) => [created, ...prev]);
+        setServerTotal((prev) => prev + 1);
       }
       setFormOpen(false);
     } catch (e) {
@@ -109,8 +155,11 @@ const CategoriesPage = () => {
   };
 
   const handleDelete = async () => {
-    if (!deleteId) return;
     setCategories((prev) => prev.filter((c) => c.id !== deleteId));
+    if (allCategories) {
+      setAllCategories((prev) => (prev ?? []).filter((c) => c.id !== deleteId));
+    }
+    setServerTotal((p) => Math.max(0, p - 1));
     setDeleteId(null);
     try {
       await deleteCategoryApi(deleteId);
@@ -123,7 +172,7 @@ const CategoriesPage = () => {
     <div className="space-y-6">
       <PageHeader
         title="Categories"
-        description={isLoading ? "Loading…" : `${categories.length} categories`}
+        description={isLoading ? "Loading…" : `${totalItems} categories`}
         action={(
           <Button onClick={openAdd} size="sm">
             <Plus className="mr-1 h-4 w-4" />
@@ -132,40 +181,66 @@ const CategoriesPage = () => {
         )}
       />
 
+      <div className="mb-4 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+        <div className="flex flex-1 flex-col gap-3 md:flex-row md:items-center">
+          <div className="relative w-full max-w-sm">
+            <Search className="absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-blue-400" />
+            <Input
+              placeholder="Search categories…"
+              className="pl-8 w-full"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              autoComplete="off"
+            />
+          </div>
+
+          <div className="w-full min-w-[140px]">
+              <input
+                type="date"
+                value={dateFilter}
+                onChange={(e) => {
+                  setPage(1);
+                  setDateFilter(e.target.value);
+                }}
+                className="h-10 w-full rounded-lg border border-white/20 bg-white/10 px-3 flex items-center text-sm text-white backdrop-blur-lg hover:bg-white/15 focus:outline-none focus:ring-2 focus:ring-blue-500 [color-scheme:dark]"
+              />
+            </div>
+
+          <Select value={order} onValueChange={(val: "asc" | "desc") => setOrder(val)}>
+            <SelectTrigger className="w-full md:w-[140px] h-10 rounded-lg border border-white/20 bg-white/10 text-white backdrop-blur-lg hover:bg-white/10 data-[placeholder]:text-gray-300">
+              <SelectValue placeholder="Order" />
+            </SelectTrigger>
+            <SelectContent className="border border-white/10 bg-slate-900 text-white">
+              <SelectItem value="desc" className="focus:bg-white/10 focus:text-white data-[state=checked]:bg-blue-500/20 data-[state=checked]:text-blue-200">Descending</SelectItem>
+              <SelectItem value="asc" className="focus:bg-white/10 focus:text-white data-[state=checked]:bg-blue-500/20 data-[state=checked]:text-blue-200">Ascending</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+      </div>
+
       {isLoading ? (
         <div className="flex items-center justify-center gap-2 py-16 text-gray-400">
           <Loader2 className="h-6 w-6 animate-spin" />
           <span className="text-sm">Loading categories…</span>
         </div>
+      ) : displayedCategories.length === 0 ? (
+        <div className="rounded-xl border border-white/20 bg-white/10 p-8 text-center text-sm text-white/50 backdrop-blur-lg">
+          No categories found
+        </div>
       ) : (
         <>
-          <div className="flex items-center justify-end gap-2">
-            <Select value={String(pageSize)} onValueChange={(value) => { setPageSize(Number(value)); setPage(1); }}>
-              <SelectTrigger className="h-10 w-full rounded-lg border border-white/20 bg-white/10 text-white backdrop-blur-lg hover:bg-white/10 data-[placeholder]:text-gray-300 sm:w-44">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent className="border border-white/10 bg-slate-900 text-white">
-                {[6, 9, 12].map((size) => (
-                  <SelectItem key={size} value={String(size)} className="focus:bg-white/10 focus:text-white data-[state=checked]:bg-blue-500/20 data-[state=checked]:text-blue-200">
-                    {size}/page
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
-            {paginatedCategories.map((c) => (
-            <div key={c.id} className="flex items-center justify-between rounded-xl border border-white/10 bg-white/5 p-3 text-white/80 shadow-lg backdrop-blur-xl transition-all duration-300 hover:scale-[1.02] hover:shadow-2xl sm:p-4 md:p-5">
-              <div>
-                <p className="font-medium text-white/90">{c.name}</p>
-                <p className="text-xs text-white/50">{c.productCount} products</p>
+            {displayedCategories.map((c) => (
+              <div key={c.id} className="flex items-center justify-between rounded-xl border border-white/10 bg-white/5 p-3 text-white/80 shadow-lg backdrop-blur-xl transition-all duration-300 hover:scale-[1.02] hover:shadow-2xl sm:p-4 md:p-5">
+                <div>
+                  <p className="font-medium text-white/90">{c.name}</p>
+                  <p className="text-xs text-white/50">{c.productCount} products</p>
+                </div>
+                <div className="flex gap-2">
+                  <button type="button" onClick={() => openEdit(c)} className="rounded-lg p-2 text-blue-400 transition-all duration-200 hover:scale-[1.02] hover:bg-white/10"><Pencil className="h-4 w-4" /></button>
+                  <button type="button" onClick={() => setDeleteId(c.id)} className="rounded-lg p-2 text-red-400 transition-all duration-200 hover:scale-[1.02] hover:bg-white/10"><Trash2 className="h-4 w-4" /></button>
+                </div>
               </div>
-              <div className="flex gap-2">
-                <button type="button" onClick={() => openEdit(c)} className="rounded-lg p-2 text-blue-400 transition-all duration-200 hover:scale-[1.02] hover:bg-white/10"><Pencil className="h-4 w-4" /></button>
-                <button type="button" onClick={() => setDeleteId(c.id)} className="rounded-lg p-2 text-red-400 transition-all duration-200 hover:scale-[1.02] hover:bg-white/10"><Trash2 className="h-4 w-4" /></button>
-              </div>
-            </div>
             ))}
           </div>
 
@@ -254,6 +329,11 @@ const CategoriesPage = () => {
                   </PaginationItem>
                 </PaginationContent>
               </Pagination>
+              <div className="mt-3 text-center text-sm text-gray-400">
+                Showing{" "}
+                {Math.min((page - 1) * pageSize + 1, totalItems)}-
+                {Math.min(page * pageSize, totalItems)} of {totalItems}
+              </div>
             </div>
           ) : null}
         </>

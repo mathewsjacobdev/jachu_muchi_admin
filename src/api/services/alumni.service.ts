@@ -2,6 +2,7 @@ import { api } from "../client";
 import type { Alumni } from "@/lib/alumni-store";
 
 export const ALUMNI_LIST_PATH = "/alumni/all";
+export const ALUMNI_FILTER_PATH = "/alumni/filter";
 const ALUMNI_BASE_PATH = "/alumni";
 export const alumniDetailPath = (id: string) => `${ALUMNI_BASE_PATH}/${id}`;
 
@@ -63,6 +64,52 @@ export const getAlumniList = async (): Promise<Alumni[]> => {
   return list
     .filter((item): item is Record<string, unknown> => isRecord(item))
     .map((item) => rowToAlumni(item));
+};
+
+export type AlumniFilterSortBy = "createdAt" | "name" | "company";
+export type AlumniFilterOrder = "asc" | "desc";
+
+export type AlumniFilterParams = {
+  page?: number;
+  limit?: number;
+  search?: string;
+  date?: string;
+  sortBy?: AlumniFilterSortBy | string;
+  order?: AlumniFilterOrder;
+};
+
+export type AlumniFilterResult = {
+  data: Alumni[];
+  total: number;
+  page: number;
+  limit: number;
+};
+
+export const filterAlumni = async (
+  params: AlumniFilterParams,
+  signal?: AbortSignal
+): Promise<AlumniFilterResult> => {
+  const q = new URLSearchParams();
+  if (params.page) q.set("page", String(params.page));
+  if (params.limit) q.set("limit", String(params.limit));
+  if (params.search?.trim()) q.set("search", params.search.trim());
+  if (params.date) q.set("date", params.date);
+  if (params.sortBy) if (params.date) q.set("date", params.date);
+  q.set("sortBy", params.sortBy);
+  if (params.order) q.set("order", params.order);
+
+  const res = await api.get<{
+    success: boolean;
+    data: AlumniApiRow[];
+    pagination?: { total: number; page: number; pages: number };
+  }>(`${ALUMNI_FILTER_PATH}?${q.toString()}`, signal ? { signal } : undefined);
+
+  return {
+    data: Array.isArray(res.data.data) ? res.data.data.map(mapApiRowToAlumni) : [],
+    total: res.data.pagination?.total ?? 0,
+    page: res.data.pagination?.page ?? params.page ?? 1,
+    limit: params.limit ?? 10,
+  };
 };
 
 export const getAlumniById = async (id: string): Promise<Alumni | null> => {
