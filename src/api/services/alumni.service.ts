@@ -11,6 +11,7 @@ type AlumniApiRow = {
   name: string;
   role?: string;
   company?: string;
+  place?: string;
   profileImageUrl?: string;
 };
 
@@ -20,6 +21,8 @@ const isAlumniRow = (x: unknown): x is Alumni =>
   typeof (x as Alumni).id === "string" &&
   "company" in x &&
   typeof (x as Alumni).company === "string" &&
+  "place" in x &&
+  typeof (x as Alumni).place === "string" &&
   !("phones" in x);
 
 const isRecord = (x: unknown): x is Record<string, unknown> =>
@@ -36,6 +39,7 @@ const mapApiRowToAlumni = (row: AlumniApiRow): Alumni => ({
   name: row.name,
   role: row.role ?? "",
   company: row.company ?? "",
+  place: row.place ?? "",
   image: row.profileImageUrl ?? "",
 });
 
@@ -44,6 +48,7 @@ const rowToAlumni = (raw: Record<string, unknown>): Alumni => ({
   name: String(raw.name ?? ""),
   role: String(raw.role ?? ""),
   company: String(raw.company ?? ""),
+  place: String(raw.place ?? ""),
   image:
     typeof raw.image === "string"
       ? raw.image
@@ -94,8 +99,7 @@ export const filterAlumni = async (
   if (params.limit) q.set("limit", String(params.limit));
   if (params.search?.trim()) q.set("search", params.search.trim());
   if (params.date) q.set("date", params.date);
-  if (params.sortBy) if (params.date) q.set("date", params.date);
-  q.set("sortBy", params.sortBy);
+  if (params.sortBy) q.set("sortBy", params.sortBy);
   if (params.order) q.set("order", params.order);
 
   const res = await api.get<{
@@ -132,6 +136,7 @@ export const createAlumni = async (payload: Omit<Alumni, "id">): Promise<Alumni>
     name: payload.name,
     role: payload.role,
     company: payload.company,
+    place: payload.place,
     ...(payload.image ? { profileImageUrl: payload.image } : {}),
   });
   const row = isRecord(res.data) && isRecord(res.data.data) ? res.data.data : res.data;
@@ -149,10 +154,11 @@ export const updateAlumniApi = async (id: string, payload: Omit<Alumni, "id">): 
     name: payload.name,
     role: payload.role,
     company: payload.company,
+    place: payload.place,
     ...(payload.image ? { profileImageUrl: payload.image } : {}),
   });
 };
 
 export const deleteAlumniApi = async (id: string): Promise<void> => {
   await api.delete(alumniDetailPath(id));
-};
+}

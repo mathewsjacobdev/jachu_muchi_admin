@@ -10,21 +10,33 @@ export type CourseListItem = {
   type: string;
   duration: string;
   eligibility: string;
-  keyDetails: string;
+  CourseOverview: string;
   status: "Active" | "Inactive";
   image: string;
+  university?: string;
+  college?: string;
+  courseRoll?: string;
+  syllabus?: string;
+  courseHighlights?: string;
+  careerOutcomes?: string;
 };
 
 export type CoursePayload = {
   // New backend shape
   courseName?: string;
-  keyDetails?: string;
+  CourseOverview?: string;
   duration?: string;
   eligibility?: string;
   type?: string;
   imageUrl?: string;
   imageFile?: File | null;
   status?: "Active" | "Inactive";
+  university?: string;
+  college?: string;
+  courseRoll?: string;
+  syllabus?: string;
+  courseHighlights?: string;
+  careerOutcomes?: string;
   // Backward-compat keys used by existing UI calls
   title?: string;
   body?: string;
@@ -37,9 +49,15 @@ type CourseListApiRow = {
   type?: string;
   duration?: string;
   eligibility?: string;
-  keyDetails?: string;
+  CourseOverview?: string;
   status?: boolean | "Active" | "Inactive";
   imageUrl?: string;
+  university?: string;
+  college?: string;
+  courseRoll?: string;
+  syllabus?: string;
+  courseHighlights?: string;
+  careerOutcomes?: string;
 };
 
 const isRecord = (x: unknown): x is Record<string, unknown> =>
@@ -75,12 +93,18 @@ const mapListRowToUi = (item: CourseListApiRow): CourseListItem => ({
   type: item.type ?? "",
   duration: item.duration ?? "",
   eligibility: item.eligibility ?? "",
-  keyDetails: item.keyDetails ?? "",
+  CourseOverview: item.CourseOverview ?? "",
   status:
     item.status === "Active" || item.status === true
       ? "Active"
       : "Inactive",
   image: toAbsoluteImageUrl(item.imageUrl),
+  university: item.university ?? "",
+  college: item.college ?? "",
+  courseRoll: item.courseRoll ?? "",
+  syllabus: item.syllabus ?? "",
+  courseHighlights: item.courseHighlights ?? "",
+  careerOutcomes: item.careerOutcomes ?? "",
 });
 
 export const mapCoursesResponse = (data: unknown): CourseListItem[] => {
@@ -152,7 +176,13 @@ export type CourseFormState = {
   type: string;
   duration: string;
   eligibility: string;
-  keyDetails: string;
+  CourseOverview: string;
+  university?: string;
+  college?: string;
+  courseRoll?: string;
+  syllabus?: string;
+  courseHighlights?: string;
+  careerOutcomes?: string;
   imageUrl?: string;
 };
 
@@ -163,7 +193,15 @@ export const mapCourseDetailToForm = (raw: Record<string, unknown>): CourseFormS
     type: String(detail.type ?? ""),
     duration: String(detail.duration ?? ""),
     eligibility: String(detail.eligibility ?? ""),
-    keyDetails: String(detail.keyDetails ?? ""),
+    CourseOverview: String(detail.CourseOverview ?? ""),
+    university: typeof detail.university === "string" ? detail.university : "",
+    college: typeof detail.college === "string" ? detail.college : "",
+    courseRoll: typeof detail.courseRoll === "string" ? detail.courseRoll : "",
+    syllabus: typeof detail.syllabus === "string" ? detail.syllabus : "",
+    courseHighlights:
+      typeof detail.courseHighlights === "string" ? detail.courseHighlights : "",
+    careerOutcomes:
+      typeof detail.careerOutcomes === "string" ? detail.careerOutcomes : "",
     imageUrl: typeof detail.imageUrl === "string" ? detail.imageUrl : undefined,
   };
 };
@@ -178,21 +216,27 @@ export const getCourse = async (id: string, signal?: AbortSignal): Promise<Cours
     type: "",
     duration: "",
     eligibility: "",
-    keyDetails: "",
+    CourseOverview: "",
   };
 };
 
 const toFormData = (data: CoursePayload): FormData => {
   const formData = new FormData();
   const courseName = data.courseName ?? data.title ?? "";
-  const keyDetails = data.keyDetails ?? data.body ?? "";
+  const CourseOverview = data.CourseOverview ?? data.body ?? "";
 
   formData.append("name", courseName);
   formData.append("type", data.type ?? "");
   formData.append("duration", data.duration ?? "");
-  formData.append("keyDetails", keyDetails);
+  formData.append("CourseOverview", CourseOverview);
   formData.append("eligibility", data.eligibility ?? "");
   formData.append("status", data.status ?? "Active");
+  formData.append("university", data.university ?? "");
+  formData.append("college", data.college ?? "");
+  formData.append("courseRoll", data.courseRoll ?? "");
+  formData.append("syllabus", data.syllabus ?? "");
+  formData.append("courseHighlights", data.courseHighlights ?? "");
+  formData.append("careerOutcomes", data.careerOutcomes ?? "");
 
   if (data.imageFile) {
     formData.append("courseImage", data.imageFile);

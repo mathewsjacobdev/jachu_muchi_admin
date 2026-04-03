@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
-import { ArrowLeft, Clock, Loader2, X } from "lucide-react";
+// Added 'Plus' to your lucide-react imports
+import { ArrowLeft, Clock, Loader2, X, Plus } from "lucide-react";
 
 import PageHeader from "@/components/shared/PageHeader";
 import { Button } from "@/components/ui/button";
@@ -17,12 +18,19 @@ import {
 
 const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
 
+// 1. Updated these three fields to be arrays instead of empty strings
 const emptyForm = {
   courseName: "",
   type: "",
   duration: "",
   eligibility: "",
-  keyDetails: "",
+  courseOverview: "",
+  university: "",
+  college: "",
+  courseRoll: "",
+  syllabus: [] as string[],
+  courseHighlights: [] as string[],
+  careerOutcomes: [] as string[],
 };
 
 const courseTypeOptions = [
@@ -38,6 +46,82 @@ type EditLocationState = {
   course?: CourseListItem;
 };
 
+// 2. Created a Reusable Tag Input Component to keep your main UI clean
+const TagInputField = ({
+  label,
+  placeholder,
+  tags,
+  onChange,
+}: {
+  label: string;
+  placeholder: string;
+  tags: string[];
+  onChange: (tags: string[]) => void;
+}) => {
+  const [inputValue, setInputValue] = useState("");
+
+  const handleAdd = () => {
+    if (inputValue.trim()) {
+      onChange([...tags, inputValue.trim()]);
+      setInputValue("");
+    }
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === "Enter") {
+      e.preventDefault(); // Prevents the main form from submitting
+      handleAdd();
+    }
+  };
+
+  const removeTag = (indexToRemove: number) => {
+    onChange(tags.filter((_, index) => index !== indexToRemove));
+  };
+
+  return (
+    <div className="space-y-2">
+      <Label className="text-sm font-medium text-gray-200">{label}</Label>
+      <div className="flex flex-col gap-2 sm:flex-row">
+        <Input
+          value={inputValue}
+          onChange={(e) => setInputValue(e.target.value)}
+          onKeyDown={handleKeyDown}
+          placeholder={placeholder}
+        />
+        <Button 
+          type="button" 
+          variant="outline" 
+          onClick={handleAdd}
+          className="bg-white/5 border-white/20 text-white hover:bg-white/10"
+        >
+          <Plus className="h-4 w-4" />
+        </Button>
+      </div>
+      {tags.length > 0 && (
+        <div className="flex flex-wrap gap-2 mt-2">
+          {tags.map((tag, index) => (
+            <span
+              key={index}
+              className="inline-flex items-center gap-1.5 rounded-full border border-white/10 bg-white/10 px-3 py-1.5 text-xs font-medium text-white/80"
+            >
+              {tag}
+              <button
+                type="button"
+                onClick={() => removeTag(index)}
+                className="rounded-full p-0.5 transition-colors hover:bg-white/20"
+                aria-label={`Remove ${tag}`}
+              >
+                <X className="h-3 w-3" />
+              </button>
+            </span>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+};
+
+
 const CourseFormPage = () => {
   const { id } = useParams();
   const navigate = useNavigate();
@@ -51,8 +135,26 @@ const CourseFormPage = () => {
   const [previewUrl, setPreviewUrl] = useState("");
   const [isPreviewOpen, setIsPreviewOpen] = useState(false);
   const [imageError, setImageError] = useState("");
+  const [formError, setFormError] = useState("");
   const [editLoading, setEditLoading] = useState(isEdit);
   const [submitting, setSubmitting] = useState(false);
+
+  // Helper to ensure we always get an array, even if the DB previously stored a comma-separated string
+  const ensureArray = (value: any) => {
+    if (Array.isArray(value)) {
+      return value.map((v) => String(v).trim()).filter(Boolean);
+    }
+    if (typeof value === "string") {
+      return value
+        .split(/[,\n]+/)
+        .map((v) => v.trim())
+        .filter(Boolean);
+    }
+    if (value != null) {
+      return [String(value).trim()].filter(Boolean);
+    }
+    return [];
+  };
 
   useEffect(() => {
     if (canPrefillFromState && stateCourse) {
@@ -61,7 +163,14 @@ const CourseFormPage = () => {
         type: stateCourse.type,
         duration: stateCourse.duration,
         eligibility: stateCourse.eligibility,
-        keyDetails: stateCourse.keyDetails,
+        courseOverview: stateCourse.CourseOverview ?? "",
+        university: stateCourse.university ?? "",
+        college: stateCourse.college ?? "",
+        courseRoll: stateCourse.courseRoll ?? "",
+        // Safely map incoming data to arrays
+        syllabus: ensureArray(stateCourse.syllabus),
+        courseHighlights: ensureArray(stateCourse.courseHighlights),
+        careerOutcomes: ensureArray(stateCourse.careerOutcomes),
       });
       setPreviewUrl(stateCourse.image || "");
       setImageFile(null);
@@ -84,7 +193,14 @@ const CourseFormPage = () => {
           type: data.type,
           duration: data.duration,
           eligibility: data.eligibility,
-          keyDetails: data.keyDetails,
+          courseOverview: data.CourseOverview ?? "",
+          university: data.university ?? "",
+          college: data.college ?? "",
+          courseRoll: data.courseRoll ?? "",
+          // Safely map incoming data to arrays
+          syllabus: ensureArray(data.syllabus),
+          courseHighlights: ensureArray(data.courseHighlights),
+          careerOutcomes: ensureArray(data.careerOutcomes),
         });
         setPreviewUrl(data.imageUrl ?? "");
         setImageFile(null);
@@ -115,9 +231,16 @@ const CourseFormPage = () => {
       setPreviewUrl("");
       return;
     }
-    if (!file.type.startsWith("image/")) return;
+    if (!file.type.startsWith("image/")) {
+      setImageError("Only image files (PNG/JPG/GIF) are allowed.");
+      setImageFile(null);
+      setPreviewUrl("");
+      return;
+    }
     if (file.size > MAX_IMAGE_BYTES) {
       setImageError("Image must be 5MB or smaller.");
+      setImageFile(null);
+      setPreviewUrl("");
       return;
     }
     setImageFile(file);
@@ -142,12 +265,29 @@ const CourseFormPage = () => {
       e.preventDefault();
       if (isEdit && !id) return;
 
+      setFormError("");
+      if (!form.courseName.trim()) {
+        setFormError("Course name is required.");
+        return;
+      }
+
+      if (!form.courseOverview.trim()) {
+        setFormError("Course Overview (key details) is required.");
+        return;
+      }
+
       const payload: CoursePayload = {
         courseName: form.courseName,
-        keyDetails: form.keyDetails,
+        CourseOverview: form.courseOverview,
         duration: form.duration,
         eligibility: form.eligibility,
         type: form.type,
+        university: form.university,
+        college: form.college,
+        courseRoll: form.courseRoll,
+        syllabus: form.syllabus.join(", "),
+        courseHighlights: form.courseHighlights.join(", "),
+        careerOutcomes: form.careerOutcomes.join(", "),
         imageUrl: previewUrl,
         imageFile,
       };
@@ -166,7 +306,7 @@ const CourseFormPage = () => {
         setSubmitting(false);
       }
     },
-    [form.courseName, form.duration, form.eligibility, form.keyDetails, form.type, id, imageFile, isEdit, navigate, previewUrl],
+    [form, id, imageFile, isEdit, navigate, previewUrl],
   );
 
   const durationLabel = useMemo(
@@ -234,20 +374,23 @@ const CourseFormPage = () => {
                   placeholder="e.g. 12 Weeks"
                 />
               </div>
-            </div>
-
-            <div className="space-y-2">
-              <Label className="text-sm font-medium text-gray-200">Key Details</Label>
-              <Textarea
-                value={form.keyDetails}
-                onChange={(e) => setForm((prev) => ({ ...prev, keyDetails: e.target.value }))}
-                placeholder="Write key details"
-                rows={5}
-                className="min-h-[120px]"
-              />
-            </div>
-
-            <div className="space-y-2">
+              <div className="space-y-2">
+                <Label className="text-sm font-medium text-gray-200">University</Label>
+                <Input
+                  value={form.university}
+                  onChange={(e) => setForm((prev) => ({ ...prev, university: e.target.value }))}
+                  placeholder="e.g. ABC University"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label className="text-sm font-medium text-gray-200">College</Label>
+                <Input
+                  value={form.college}
+                  onChange={(e) => setForm((prev) => ({ ...prev, college: e.target.value }))}
+                  placeholder="e.g. XYZ College"
+                />
+              </div>
+                          <div className="space-y-2">
               <Label className="text-sm font-medium text-gray-200">Eligibility</Label>
               <Input
                 value={form.eligibility}
@@ -255,6 +398,54 @@ const CourseFormPage = () => {
                 placeholder="Who can enroll?"
               />
             </div>
+              
+            </div>
+
+            <div className="space-y-2">
+                <Label className="text-sm font-medium text-gray-200">Course Roll</Label>
+                <Textarea
+                  value={form.courseRoll}
+                  onChange={(e) => setForm((prev) => ({ ...prev, courseRoll: e.target.value }))}
+                  placeholder="write a course roll"
+                  rows={5}
+                  className="min-h-[120px]"
+                />
+              </div>
+
+            <div className="space-y-2">
+              <Label className="text-sm font-medium text-gray-200">Course Overview</Label>
+              <Textarea
+                value={form.courseOverview}
+                onChange={(e) => setForm((prev) => ({ ...prev, courseOverview: e.target.value }))}
+                placeholder="Write Course Overview"
+                rows={5}
+                className="min-h-[120px]"
+              />
+            </div>
+
+            {/* 3. Replaced Textareas with our new TagInputField component */}
+            <TagInputField
+              label="Syllabus Modules"
+              placeholder="Add a syllabus topic and press Enter..."
+              tags={form.syllabus}
+              onChange={(newTags) => setForm((prev) => ({ ...prev, syllabus: newTags }))}
+            />
+
+            <TagInputField
+              label="Course Highlights"
+              placeholder="Add a highlight and press Enter..."
+              tags={form.courseHighlights}
+              onChange={(newTags) => setForm((prev) => ({ ...prev, courseHighlights: newTags }))}
+            />
+
+            <TagInputField
+              label="Career Outcomes"
+              placeholder="Add a career outcome and press Enter..."
+              tags={form.careerOutcomes}
+              onChange={(newTags) => setForm((prev) => ({ ...prev, careerOutcomes: newTags }))}
+            />
+
+
 
             <div className="space-y-2">
               <Label className="text-sm font-medium text-gray-200">Course Image (optional)</Label>
@@ -294,21 +485,24 @@ const CourseFormPage = () => {
             </div>
           </div>
 
-          <div className="flex flex-wrap items-center gap-3">
-            <Button
-              type="submit"
-              disabled={submitting}
-              className="bg-blue-600 text-white shadow-md transition-all duration-200 hover:scale-[1.02] hover:bg-blue-700 hover:shadow-xl"
-            >
-              {submitting ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+          <div className="flex flex-col gap-2">
+            {formError ? (
+              <p className="text-sm font-medium text-red-300">{formError}</p>
+            ) : null}
+            <div className="flex flex-wrap items-center gap-3">
+              <Button
+                type="submit"
+                disabled={submitting}
+                className="bg-blue-600 text-white shadow-md transition-all duration-200 hover:scale-[1.02] hover:bg-blue-700 hover:shadow-xl"
+              >
+              {submitting ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
               {isEdit ? "Save Changes" : "Save Course"}
             </Button>
             <Button type="button" variant="outline" onClick={() => navigate("/products")}>
               Cancel
             </Button>
           </div>
-        </div>
-
+        </div>      </div>
         <aside className="lg:col-span-1">
           <div className="sticky top-4 space-y-3 rounded-xl border border-white/20 bg-white/10 p-4 backdrop-blur-lg">
             <p className="text-xs font-semibold uppercase tracking-wider text-gray-400">
@@ -340,7 +534,7 @@ const CourseFormPage = () => {
                   {form.courseName || "Course name"}
                 </p>
                 <p className="line-clamp-2 text-sm leading-relaxed text-gray-400">
-                  {form.keyDetails || "Key details will appear here as you type."}
+                  {form.courseOverview || "Course overview will appear here as you type."}
                 </p>
                 <div className="flex flex-wrap items-center gap-2 pt-1">
                   <span className="inline-flex items-center gap-1.5 rounded-full border border-blue-500/30 bg-blue-500/15 px-2.5 py-1 text-xs font-medium text-blue-200">

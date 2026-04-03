@@ -24,6 +24,7 @@ const AlumniPage = () => {
   const [allAlumni, setAllAlumni] = useState<Alumni[] | null>(null);
   const [serverTotal, setServerTotal] = useState(0);
 
+  const [error, setError] = useState("");
   const [isLoading, setIsLoading] = useState(true);
   const [deleteId, setDeleteId] = useState<string | null>(null);
 
@@ -45,6 +46,7 @@ const AlumniPage = () => {
 
     const fetchList = async () => {
       setIsLoading(true);
+      setError("");
       try {
         if (!hasFilter) {
           const data = await getAlumniList();
@@ -71,7 +73,10 @@ const AlumniPage = () => {
         }
       } catch (e) {
         if ((e as Error).name === "AbortError") return;
-        if (!cancelled) console.error(e);
+        if (!cancelled) {
+          console.error(e);
+          setError("Failed to load alumni. Please try refreshing the page.");
+        }
       } finally {
         if (!cancelled) setIsLoading(false);
       }
@@ -101,16 +106,29 @@ const AlumniPage = () => {
 
   const handleDelete = async () => {
     if (!deleteId) return;
+
+    const originalAlumni = alumni;
+    const originalAllAlumni = allAlumni;
+    const originalServerTotal = serverTotal;
+    const idToDelete = deleteId;
+
+    // Optimistic update
     setAlumni((prev) => prev.filter((item) => item.id !== deleteId));
     if (allAlumni) {
       setAllAlumni((prev) => (prev ?? []).filter((item) => item.id !== deleteId));
     }
     setServerTotal((p) => Math.max(0, p - 1));
     setDeleteId(null);
+
     try {
-      await deleteAlumniApi(deleteId);
+      await deleteAlumniApi(idToDelete);
     } catch (e) {
       console.error(e);
+      // Rollback on failure
+      setAlumni(originalAlumni);
+      setAllAlumni(originalAllAlumni);
+      setServerTotal(originalServerTotal);
+      setError(`Failed to delete alumni. Please try again.`);
     }
   };
 
@@ -165,6 +183,12 @@ const AlumniPage = () => {
           </Select>
         </div>
       </div>
+
+      {error && !isLoading && (
+        <div className="rounded-md border border-red-500/20 bg-red-500/10 p-4 text-sm text-red-300">
+          {error}
+        </div>
+      )}
 
       {isLoading ? (
         <div className="flex items-center justify-center gap-2 py-16 text-gray-400">

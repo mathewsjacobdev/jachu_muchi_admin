@@ -20,6 +20,8 @@ type ArticleApiRow = {
   createdAt?: string;
   status?: ArticleStatus | string;
   imageUrl?: string;
+  category?: string;
+  details?: string;
 };
 
 /** Matches backend `filterArticles` `sortBy` (default `createdAt`). */
@@ -32,6 +34,7 @@ export type ArticlesFilterParams = {
   limit?: number;
   search?: string;
   status?: ArticleStatus | "All";
+  category?: string;
   type?: string;
   date?: string;
   sortBy?: ArticleFilterSortBy;
@@ -74,6 +77,8 @@ const mapApiArticleToNewsItem = (row: ArticleApiRow): NewsItem => ({
   image: typeof row.imageUrl === "string" ? row.imageUrl : "",
   date: toDateInputValue(row.articleDate ?? row.createdAt),
   status: normalizeStatus(row.status),
+  category: typeof row.category === "string" ? row.category : "",
+  details: typeof row.details === "string" ? row.details : "",
 });
 
 export const rowToNewsItem = (raw: Record<string, unknown>): NewsItem => ({
@@ -89,6 +94,8 @@ export const rowToNewsItem = (raw: Record<string, unknown>): NewsItem => ({
         ? toDateInputValue(raw.createdAt)
         : new Date().toISOString().split("T")[0],
   status: raw.status === "Published" || raw.status === "Draft" ? raw.status : "Draft",
+  category: typeof raw.category === "string" ? raw.category : "",
+  details: typeof raw.details === "string" ? raw.details : "",
 });
 
 const isLikelyNewsItemRow = (x: unknown): x is Record<string, unknown> =>
@@ -107,6 +114,8 @@ const mapFilterRowToNewsItem = (row: unknown): NewsItem => {
     image: "",
     date: new Date().toISOString().split("T")[0],
     status: "Draft",
+    category: "",
+    details: "",
   };
 };
 
@@ -119,6 +128,7 @@ const buildArticlesFilterQuery = (params: ArticlesFilterParams): string => {
   const search = params.search?.trim();
   if (search) q.set("search", search);
   if (params.status && params.status !== "All") q.set("status", params.status);
+  if (params.category && params.category !== "All") q.set("category", params.category);
   const type = params.type?.trim();
   if (type) q.set("type", type);
   if (params.date) q.set("date", params.date);
@@ -217,6 +227,8 @@ export const createNews = async (payload: Omit<NewsItem, "id">): Promise<NewsIte
     articleDate: payload.date,
     status: payload.status,
     imageUrl: payload.image,
+    category: payload.category,
+    details: payload.details,
   });
   const root = res.data ?? {};
   const row = isRecord(root) && isRecord(root.data) ? (root.data as Record<string, unknown>) : (root as Record<string, unknown>);
@@ -229,6 +241,8 @@ export const createNews = async (payload: Omit<NewsItem, "id">): Promise<NewsIte
     image: typeof row.imageUrl === "string" ? row.imageUrl : payload.image,
     date: typeof row.articleDate === "string" ? toDateInputValue(row.articleDate) : payload.date,
     status: normalizeStatus(row.status ?? payload.status),
+    category: typeof row.category === "string" ? row.category : payload.category ?? "",
+    details: typeof row.details === "string" ? row.details : payload.details ?? "",
   };
 };
 
@@ -239,6 +253,8 @@ export const updateNews = async (id: string, payload: Omit<NewsItem, "id">): Pro
     articleDate: payload.date,
     status: payload.status,
     imageUrl: payload.image,
+    category: payload.category,
+    details: payload.details,
   });
   const root = res.data ?? {};
   const data = isRecord(root) && isRecord(root.data) ? (root.data as Record<string, unknown>) : (root as Record<string, unknown>);
@@ -249,6 +265,8 @@ export const updateNews = async (id: string, payload: Omit<NewsItem, "id">): Pro
     image: typeof data.imageUrl === "string" ? data.imageUrl : payload.image,
     date: typeof data.articleDate === "string" ? toDateInputValue(data.articleDate) : payload.date,
     status: normalizeStatus(data.status ?? payload.status),
+    category: typeof data.category === "string" ? data.category : payload.category ?? "",
+    details: typeof data.details === "string" ? data.details : payload.details ?? "",
   };
 };
 

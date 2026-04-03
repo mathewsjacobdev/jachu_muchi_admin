@@ -31,6 +31,8 @@ export interface NewsItem {
   image: string;
   date: string;
   status: "Published" | "Draft";
+  category?: string;
+  details?: string;
 }
 
 export interface User {

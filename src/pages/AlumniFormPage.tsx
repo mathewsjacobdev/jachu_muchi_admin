@@ -15,6 +15,7 @@ const emptyForm: Omit<Alumni, "id" | "image"> = {
   name: "",
   company: "",
   role: "",
+  place:"",
 };
 
 const fileToDataUrl = (file: File): Promise<string> =>
@@ -40,10 +41,11 @@ const AlumniFormPage = () => {
   const [editLoading, setEditLoading] = useState(isEdit);
   const [loadError, setLoadError] = useState("");
   const [saving, setSaving] = useState(false);
+  const [formError, setFormError] = useState("");
 
   useEffect(() => {
     if (canPrefillFromState && stateAlumni) {
-      setForm({ name: stateAlumni.name, company: stateAlumni.company, role: stateAlumni.role });
+      setForm({ name: stateAlumni.name, company: stateAlumni.company, role: stateAlumni.role, place: stateAlumni.place });
       setPreviewUrl(stateAlumni.image ?? "");
       setImageFile(null);
       setEditLoading(false);
@@ -61,7 +63,7 @@ const AlumniFormPage = () => {
           navigate("/alumni");
           return;
         }
-        setForm({ name: existing.name, company: existing.company, role: existing.role });
+        setForm({ name: existing.name, company: existing.company, role: existing.role, place: existing.place });
         setPreviewUrl(existing.image ?? "");
       } catch (e) {
         console.error(e);
@@ -74,6 +76,16 @@ const AlumniFormPage = () => {
     void load();
   }, [canPrefillFromState, id, isEdit, navigate, stateAlumni]);
 
+  useEffect(() => {
+    // Clean up blob URL on unmount or when previewUrl changes to a new blob.
+    // The cleanup function from the previous render will be called first.
+    return () => {
+      if (previewUrl && previewUrl.startsWith("blob:")) {
+        URL.revokeObjectURL(previewUrl);
+      }
+    };
+  }, [previewUrl]);
+
   const onImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0] ?? null;
     setImageError("");
@@ -83,15 +95,18 @@ const AlumniFormPage = () => {
       setImageError("Image must be 5MB or smaller.");
       return;
     }
-    if (previewUrl.startsWith("blob:")) URL.revokeObjectURL(previewUrl);
     setImageFile(file);
     setPreviewUrl(URL.createObjectURL(file));
   };
 
   const onSave = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!form.name.trim()) return;
-
+    setFormError("");
+    if (!form.name.trim()) {
+      setFormError("Name is required.");
+      return;
+    }
+    
     const image = imageFile ? await fileToDataUrl(imageFile) : previewUrl.trim();
     setSaving(true);
     try {
@@ -100,6 +115,7 @@ const AlumniFormPage = () => {
           name: form.name.trim(),
           role: form.role.trim(),
           company: form.company.trim(),
+          place: form.place.trim(),
           image,
         });
       } else {
@@ -107,12 +123,14 @@ const AlumniFormPage = () => {
           name: form.name.trim(),
           role: form.role.trim(),
           company: form.company.trim(),
+          place: form.place.trim(),
           image,
         });
       }
       navigate("/alumni");
     } catch (err) {
       console.error(err);
+      setFormError("Failed to save alumni. Please try again.");
     } finally {
       setSaving(false);
     }
@@ -182,6 +200,12 @@ const AlumniFormPage = () => {
           <Label className="text-white/80">Company</Label>
           <Input value={form.company} onChange={(e) => setForm({ ...form, company: e.target.value })} />
         </div>
+        <div className="space-y-1.5">
+          <Label className="text-white/80">Place</Label>
+          <Input value={form.place} onChange={(e) => setForm({ ...form, place: e.target.value })} />
+        </div>
+
+        {formError ? <p className="mt-2 text-sm text-red-400">{formError}</p> : null}
 
         <div className="flex gap-2">
           <Button type="submit" disabled={saving}>

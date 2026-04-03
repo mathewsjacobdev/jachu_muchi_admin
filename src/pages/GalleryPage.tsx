@@ -313,16 +313,16 @@ const GalleryPage = () => {
           </Select>
 
           <div className="w-full min-w-[140px]">
-              <input
-                type="date"
-                value={dateFilter}
-                onChange={(e) => {
-                  setPage(1);
-                  setDateFilter(e.target.value);
-                }}
-                className="h-10 w-full rounded-lg border border-white/20 bg-white/10 px-3 flex items-center text-sm text-white backdrop-blur-lg hover:bg-white/15 focus:outline-none focus:ring-2 focus:ring-blue-500 [color-scheme:dark]"
-              />
-            </div>
+            <input
+              type="date"
+              value={dateFilter}
+              onChange={(e) => {
+                setPage(1);
+                setDateFilter(e.target.value);
+              }}
+              className="h-10 w-full rounded-lg border border-white/20 bg-white/10 px-3 flex items-center text-sm text-white backdrop-blur-lg hover:bg-white/15 focus:outline-none focus:ring-2 focus:ring-blue-500 [color-scheme:dark]"
+            />
+          </div>
 
           <Select value={order} onValueChange={(val: "asc" | "desc") => setOrder(val)}>
             <SelectTrigger className="w-full md:w-[140px] h-10 rounded-lg border border-white/20 bg-white/10 text-white backdrop-blur-lg hover:bg-white/10 data-[placeholder]:text-gray-300">
