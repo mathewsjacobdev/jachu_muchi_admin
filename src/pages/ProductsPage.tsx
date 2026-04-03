@@ -28,7 +28,7 @@ type CourseCardProps = {
 const CourseCard = memo(function CourseCard({ course, onEdit, onRequestDelete }: CourseCardProps) {
   const name = course.courseName || "Untitled course";
   const type = course.type || "General";
-  const keyDetails = course.keyDetails || "";
+  const CourseOverview = course.CourseOverview || "";
   const duration = course.duration ?? "N/A";
   const eligibility = course.eligibility?.trim() ? course.eligibility : "N/A";
 
@@ -55,13 +55,25 @@ const CourseCard = memo(function CourseCard({ course, onEdit, onRequestDelete }:
         </span>
 
         <div className="space-y-1 text-sm text-gray-400">
+          {course.university ? <p>University: {course.university}</p> : null}
+          {course.college ? <p>College: {course.college}</p> : null}
+          {course.courseRoll ? <p>Course Roll: {course.courseRoll}</p> : null}
           <p>Duration: {duration}</p>
           <p>Eligibility: {eligibility}</p>
         </div>
 
         <p className="line-clamp-2 text-sm text-gray-300">
-          {keyDetails || "No key details available."}
+          {CourseOverview || "No key details available."}
         </p>
+        {course.syllabus ? (
+          <p className="line-clamp-2 text-sm text-gray-300">Syllabus: {course.syllabus}</p>
+        ) : null}
+        {course.courseHighlights ? (
+          <p className="line-clamp-2 text-sm text-gray-300">Highlights: {course.courseHighlights}</p>
+        ) : null}
+        {course.careerOutcomes ? (
+          <p className="line-clamp-2 text-sm text-gray-300">Career: {course.careerOutcomes}</p>
+        ) : null}
 
         <div className="flex gap-2 pt-2">
           <button
@@ -187,6 +199,8 @@ const ProductsPage = () => {
     try {
       await deleteCourse(String(deleteId));
       setCourses((prev) => prev.filter((course) => course.id !== deleteId));
+      setAllCourses((prev) => (prev ? prev.filter((course) => course.id !== deleteId) : null));
+      setServerTotal((prev) => Math.max(0, prev - 1));
       setDeleteId(null);
     } catch (error) {
       console.error(error);
@@ -206,7 +220,7 @@ const ProductsPage = () => {
     <div className="space-y-6">
       <PageHeader
         title="Courses"
-        description={`${courses.length} total courses`}
+        description={`${totalCourses} total courses`}
         action={(
           <Button onClick={() => navigate("/courses/new")} size="sm">
             <Plus className="mr-1 h-4 w-4" />

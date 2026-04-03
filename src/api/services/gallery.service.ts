@@ -46,7 +46,7 @@ export type GalleryFilterParams = {
   page?: number;
   limit?: number;
   search?: string;
-  type?: string; 
+  type?: string;
   date?: string;
   sortBy?: GalleryFilterSortBy | string;
   order?: GalleryFilterOrder;

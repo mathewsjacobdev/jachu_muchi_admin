@@ -64,6 +64,7 @@ const NewsPage = () => {
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("All");
+  const [categoryFilter, setCategoryFilter] = useState<"All" | "Campus" | "Academics" | "Student Life" | "Research" | "Innovation" | "In the press">("All");
   const [dateFilter, setDateFilter] = useState("");
   const [order, setOrder] = useState<ArticleFilterOrder>("desc");
   const [page, setPage] = useState(1);
@@ -72,7 +73,7 @@ const NewsPage = () => {
 
   const deferredSearch = useDeferredValue(search.trim());
 
-  const hasFilter = deferredSearch !== "" || statusFilter !== "All" || dateFilter !== "" || order !== "desc";
+  const hasFilter = deferredSearch !== "" || statusFilter !== "All" || categoryFilter !== "All" || dateFilter !== "" || order !== "desc";
 
   const refreshStats = useCallback(() => {
     void getNewsStats().then((s) => {
@@ -94,7 +95,8 @@ const NewsPage = () => {
           limit: PAGE_SIZE,
           search: deferredSearch || undefined,
           status: statusFilter,
-              date: dateFilter || undefined,
+          category: categoryFilter || undefined,
+          date: dateFilter || undefined,
           order,
         });
         setAllNews(null);
@@ -316,6 +318,27 @@ const NewsPage = () => {
               </SelectContent>
             </Select>
 
+            <Select
+              value={categoryFilter}
+              onValueChange={(value) => {
+                setPage(1);
+                setCategoryFilter(value as "All" | "Campus" | "Academics" | "Student Life" | "Research" | "Innovation" | "In the press");
+              }}
+            >
+              <SelectTrigger className={selectTriggerClass}>
+                <SelectValue placeholder="Category" />
+              </SelectTrigger>
+              <SelectContent className="border border-white/10 bg-slate-900 text-white">
+                <SelectItem className="focus:bg-white/10 focus:text-white data-[state=checked]:bg-blue-500/20 data-[state=checked]:text-blue-200" value="All">All Categories</SelectItem>
+                <SelectItem className="focus:bg-white/10 focus:text-white data-[state=checked]:bg-blue-500/20 data-[state=checked]:text-blue-200" value="Campus">Campus</SelectItem>
+                <SelectItem className="focus:bg-white/10 focus:text-white data-[state=checked]:bg-blue-500/20 data-[state=checked]:text-blue-200" value="Academics">Academics</SelectItem>
+                <SelectItem className="focus:bg-white/10 focus:text-white data-[state=checked]:bg-blue-500/20 data-[state=checked]:text-blue-200" value="Student Life">Student Life</SelectItem>
+                <SelectItem className="focus:bg-white/10 focus:text-white data-[state=checked]:bg-blue-500/20 data-[state=checked]:text-blue-200" value="Research">Research</SelectItem>
+                <SelectItem className="focus:bg-white/10 focus:text-white data-[state=checked]:bg-blue-500/20 data-[state=checked]:text-blue-200" value="Innovation">Innovation</SelectItem>
+                <SelectItem className="focus:bg-white/10 focus:text-white data-[state=checked]:bg-blue-500/20 data-[state=checked]:text-blue-200" value="In the press">In the press</SelectItem>
+              </SelectContent>
+            </Select>
+
             <div className="w-full sm:w-[150px]">
               <input
                 type="date"
@@ -395,6 +418,9 @@ const NewsPage = () => {
                     </span>
                   </div>
                   <div>
+                    {n.category ? (
+                      <p className="mb-1 text-xs font-medium text-green-400">{n.category}</p>
+                    ) : null}
                     <h3 className="mb-1.5 line-clamp-1 text-base font-semibold tracking-tight text-gray-100">{n.title}</h3>
                     <p className="line-clamp-2 text-sm leading-6 text-gray-300">{n.description}</p>
                   </div>

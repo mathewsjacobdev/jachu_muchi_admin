@@ -97,11 +97,15 @@ const NewsDetailPage = () => {
 
         <div className="space-y-4 p-5 sm:p-6 md:p-8">
           <h1 className="text-2xl font-semibold text-white sm:text-3xl">{article.title}</h1>
-          <div className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-1 text-sm text-gray-300">
+          <div className="inline-flex flex-wrap items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-1 text-sm text-gray-300">
             <Calendar className="h-4 w-4" />
             {article.date}
+            {article.category ? (
+              <span className="text-green-400">• {article.category}</span>
+            ) : null}
           </div>
           <p className="whitespace-pre-wrap leading-7 text-gray-200">{article.description}</p>
+          <div className="prose prose-invert max-w-none mt-6" dangerouslySetInnerHTML={{ __html: article.details || article.description }} />
         </div>
       </article>
     </div>

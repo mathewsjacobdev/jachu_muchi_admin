@@ -1,6 +1,8 @@
 import { useEffect, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { ArrowLeft, Image as ImageIcon, Loader2, X } from "lucide-react";
+import ReactQuill from 'react-quill';
+import 'react-quill/dist/quill.snow.css';
 
 import PageHeader from "@/components/shared/PageHeader";
 import { Button } from "@/components/ui/button";
@@ -20,6 +22,19 @@ const emptyForm = {
   description: "",
   date: "",
   status: "Draft" as NewsStatus,
+  category: "",
+  details: "",
+};
+
+const quillModules = {
+  toolbar: [
+    [{ font: [] }, { size: [] }],
+    ["bold", "italic", "underline", "strike"],
+    [{ color: [] }, { background: [] }],
+    [{ list: "ordered" }, { list: "bullet" }, { align: [] }],
+    ["link", "image"],
+    ["clean"],
+  ],
 };
 
 const fileToDataUrl = (file: File): Promise<string> =>
@@ -61,6 +76,8 @@ const NewsFormPage = () => {
           description: article.description,
           date: article.date,
           status: article.status,
+          category: article.category ?? "",
+          details: article.details ?? "",
         });
         setPreviewUrl(article.image);
       })
@@ -105,7 +122,7 @@ const NewsFormPage = () => {
 
   const handleSave = async (event: React.FormEvent) => {
     event.preventDefault();
-    if (!form.title.trim() || !form.description.trim() || !form.date.trim()) return;
+    if (!form.title.trim() || !form.description.trim() || !form.date.trim() || !form.category.trim()) return;
 
     const image = imageFile ? await fileToDataUrl(imageFile) : previewUrl.trim();
 
@@ -117,6 +134,8 @@ const NewsFormPage = () => {
           date: form.date,
           status: form.status,
           image,
+          category: form.category,
+          details: form.details ?? "",
         });
       } else {
         await createNews({
@@ -125,6 +144,8 @@ const NewsFormPage = () => {
           date: form.date,
           status: form.status,
           image,
+          category: form.category,
+          details: form.details ?? "",
         });
       }
       navigate("/news");
@@ -180,6 +201,18 @@ const NewsFormPage = () => {
                   rows={6}
                 />
               </div>
+
+              <div className="space-y-2">
+                <Label className="text-gray-200">Full Article Details</Label>
+                <div className="bg-white text-black rounded-md overflow-hidden">
+                  <ReactQuill
+                    value={form.details || ""}
+                    onChange={(value) => setForm((prev) => ({ ...prev, details: value }))}
+                    modules={quillModules}
+                    theme="snow"
+                  />
+                </div>
+              </div>
             </div>
 
             <div className="space-y-4">
@@ -190,6 +223,23 @@ const NewsFormPage = () => {
                   value={form.date}
                   onChange={(e) => setForm((prev) => ({ ...prev, date: e.target.value }))}
                 />
+              </div>
+
+              <div className="space-y-2">
+                <Label className="text-gray-200">Category</Label>
+                <Select value={form.category} onValueChange={(value) => setForm((prev) => ({ ...prev, category: value }))}>
+                  <SelectTrigger className="h-10 w-full rounded-lg border border-white/20 bg-white/10 text-white backdrop-blur-lg hover:bg-white/10 data-[placeholder]:text-gray-300">
+                    <SelectValue placeholder="Select category" />
+                  </SelectTrigger>
+                  <SelectContent className="border border-white/10 bg-slate-900 text-white">
+                    <SelectItem className="focus:bg-white/10 focus:text-white data-[state=checked]:bg-blue-500/20 data-[state=checked]:text-blue-200" value="Campus">Campus</SelectItem>
+                    <SelectItem className="focus:bg-white/10 focus:text-white data-[state=checked]:bg-blue-500/20 data-[state=checked]:text-blue-200" value="Academics">Academics</SelectItem>
+                    <SelectItem className="focus:bg-white/10 focus:text-white data-[state=checked]:bg-blue-500/20 data-[state=checked]:text-blue-200" value="Student Life">Student Life</SelectItem>
+                    <SelectItem className="focus:bg-white/10 focus:text-white data-[state=checked]:bg-blue-500/20 data-[state=checked]:text-blue-200" value="Research">Research</SelectItem>
+                    <SelectItem className="focus:bg-white/10 focus:text-white data-[state=checked]:bg-blue-500/20 data-[state=checked]:text-blue-200" value="Innovation">Innovation</SelectItem>
+                    <SelectItem className="focus:bg-white/10 focus:text-white data-[state=checked]:bg-blue-500/20 data-[state=checked]:text-blue-200" value="In the press">In the press</SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
 
               <div className="space-y-2">
